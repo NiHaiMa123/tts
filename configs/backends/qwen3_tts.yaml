@@ -1,0 +1,48 @@
+backend_id: qwen3_tts
+family: qwen
+enabled: true
+
+worker:
+  python: backend_envs/qwen3_tts/Scripts/python.exe
+  cwd: .
+  script: workers/qwen3_tts_worker.py
+  startup_timeout_seconds: 900
+  env:
+    # Models are pre-downloaded by bootstrap; runtime must not hit network.
+    HF_HUB_OFFLINE: "1"
+
+model:
+  path_or_id: Qwen/Qwen3-TTS-12Hz-1.7B-Base
+  revision: fd4b254389122332181a7c3db7f27e918eec64e3
+  tokenizer: Qwen/Qwen3-TTS-Tokenizer-12Hz
+  tokenizer_revision: 7dd38ad4e9bad454aae9cd937d0cd577604fe229
+
+cache:
+  root: ${TTS_MODEL_ROOT:hf_cache}/qwen3_tts
+
+runtime:
+  precision: bfloat16
+  device_map: "cuda:0"
+  # RTX 5080 = sm_120; flash-attn is not assumed to work — sdpa is the
+  # official fallback. Do not force-compile unstable CUDA extensions.
+  attn_implementation: sdpa
+
+generation:
+  language: Chinese
+  max_new_tokens: 2048
+  do_sample: true
+  top_k: 50
+  top_p: 1.0
+  temperature: 0.9
+  repetition_penalty: 1.05
+  subtalker_dosample: true
+  subtalker_top_k: 50
+  subtalker_top_p: 1.0
+  subtalker_temperature: 0.9
+  x_vector_only_mode: false
+  non_streaming_mode: true
+
+notes: >
+  Qwen3-TTS 1.7B Base (3-second rapid voice clone, 10 languages).
+  Voice-clone gate only — no fine-tuning until codec + zero-shot gates
+  pass human listening.

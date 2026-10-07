@@ -1,0 +1,7 @@
+paths:
+  outputs_root: outputs
+  logs_dir: logs
+
+defaults:
+  character: suoming
+  backend: dots_legacy

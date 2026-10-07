@@ -1,0 +1,36 @@
+backend_id: voxcpm2
+family: voxcpm
+enabled: true
+
+worker:
+  python: backend_envs/voxcpm2/Scripts/python.exe
+  cwd: .
+  script: workers/voxcpm_worker.py
+  startup_timeout_seconds: 900
+  env:
+    # Model is pre-downloaded by bootstrap; runtime must not hit network.
+    HF_HUB_OFFLINE: "1"
+
+model:
+  path_or_id: openbmb/VoxCPM2
+  revision: 32279effe8c19989596f05d353d1447f51d9e915
+
+cache:
+  root: ${TTS_MODEL_ROOT:hf_cache}/voxcpm2
+
+runtime:
+  load_denoiser: false
+  local_files_only: true
+  precision: bfloat16
+
+generation:
+  cfg_value: 2.0
+  inference_timesteps: 10
+  normalize: true
+  denoise: false
+  retry_badcase: true
+
+notes: >
+  VoxCPM2 2B tokenizer-free diffusion-AR TTS (48kHz, 30 languages).
+  Zero-shot voice cloning only in this round — no training until the
+  codec + zero-shot gates pass human listening.

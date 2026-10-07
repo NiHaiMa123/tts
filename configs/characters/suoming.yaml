@@ -1,0 +1,56 @@
+character_id: suoming
+display_name: 锁暝
+dataset:
+  source: legacy_dotstts
+  train_manifest: ${DOTSTTS_ROOT}/datasets/suoming/v1/train.jsonl
+  validation_manifest: ${DOTSTTS_ROOT}/datasets/suoming/v1/validation.jsonl
+  test_manifest: ${DOTSTTS_ROOT}/datasets/suoming/v1/test.jsonl
+  root: ${DOTSTTS_ROOT}/datasets/suoming/v1
+  manifest: ${DOTSTTS_ROOT}/datasets/suoming/v1/manifest.json
+reference:
+  text: 谛天鉴除了处理岁主事务，也掌管天文、历法。各州分鉴各有职责，梦州也有自己——唔……先前御者说对谛天鉴了解不多，不知不觉话多了些。总之，谛天鉴为岁主尽责，那自然，御者若有所求，无论缘由，我都会回应。
+  audio: ${DOTSTTS_ROOT}/data/inbox/锁暝/中立_neutral/【中立_neutral】谛天鉴除了处理岁主事务，也掌管天文、历法。各州分鉴各有职责，梦州也有自己——唔……先前御者说对谛天鉴了解不多，不知不觉话多了些。总之，谛天鉴为岁主尽责，那自然，.wav
+  sha256: c4322e3230ab952edb7cd456329cb5b48195d9f33c5459c0ba76d8d79d3a7f92
+validation_anchor:
+  audio: E:\project\dotstts\data\work\standardized\e6\e60e291ffb3431fadc10be7089662e9e24274476fd48b9d42bde3f921a18cbd7.wav
+  text: 我始终想着，有一日能回到华亭，住进一间小屋。若这里需要我，我便出手相助；若不需要，便与九契他们一同，看小城在风平浪静中日来月往，如此便足够了。当然，那还是很遥远的事，眼下，心月狐与梦州大局为先。
+legacy_voice_profile:
+  path: ${DOTSTTS_ROOT}/configs/voices/suoming_step500_v1.yaml
+  model_id: suoming_step500_v1
+  base_model:
+    path: ${DOTSTTS_ROOT}/pretrained_models/dots.tts-soar
+    revision: 2f9b3e18d70d670d4c701da2dc55ded5755815ce
+  adapter:
+    path: ${DOTSTTS_ROOT}/data/work/suoming/suoming_lora_v1/checkpoint-00000500/model
+    format: dots_tts_trainable_delta
+    training_step: 500
+    weights_sha256: d6ffc625f7def0358665e6a2203ebaa9c01a6af6dc6cff6f0f7aa4d9cfe5e251
+    metadata_sha256: fbd3501c70b61015c04edb72b45bc5884d8f1948a65f28ad9c2af4f7d15f6105
+  generation:
+    language: chinese
+    template_name: tts
+    normalize_text: false
+    soften_emphasis: true
+    speaker_scale: 1.5
+    ode_method: euler
+    num_steps: 16
+    guidance_scale: 1.2
+    base_seed: 42
+    pause_ms: 250
+    max_chars: 120
+  runtime:
+    precision: bfloat16
+    optimize: true
+    max_generate_length: 500
+    max_sequence_length: 2048
+    vocoder_merge_steps: 4
+    warmup_on_optimize: true
+    merge_lora: true
+evaluation:
+  anchor_texts:
+  - id: rain
+    text: 午后凉风拂过，雨云渐聚，细雨敲在屋檐上。我坐在窗边听雨，拭去玄朱锁上的薄尘。这确实是有些凄迷的场景，但……我很喜欢。
+provenance:
+  imported_from: E:\project\dotstts
+  imported_at: '2026-10-07T15:05:44+00:00'
+  importer: scripts/import_legacy_assets.py

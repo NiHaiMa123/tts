@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Platform envs for backends (each backend gets its own env)
+backend_envs/
+
+# Secrets / local-only config
+.env
+.env.local
+
+# Outputs and model caches (large binaries live outside git)
+outputs/*
+!outputs/.gitkeep
+models/
+hf_cache/
+*.wav
+*.safetensors
+*.pt
+*.bin
+*.onnx
+
+# Logs
+logs/
+*.log
+
+# OS
+Thumbs.db
+Desktop.ini

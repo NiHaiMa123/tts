@@ -1,0 +1,32 @@
+evaluation_id: suoming_v1
+character: suoming
+output_dir: outputs/gates/suoming_v1
+seed: 42
+
+# Round 1: reconstruction -> zero-shot. No postprocessing, no training.
+cases:
+  - backend: dots_legacy
+    kind: codec_roundtrip
+    output: dots/codec_roundtrip.wav
+  - backend: dots_legacy
+    kind: zero_shot
+    output: dots/zero_shot.wav
+    options:
+      variant: base
+  - backend: dots_legacy
+    kind: generate
+    output: dots/trained_or_lora.wav
+    options:
+      variant: lora
+  - backend: voxcpm2
+    kind: codec_roundtrip
+    output: voxcpm2/codec_roundtrip.wav
+  - backend: voxcpm2
+    kind: zero_shot
+    output: voxcpm2/zero_shot.wav
+  - backend: qwen3_tts
+    kind: codec_roundtrip
+    output: qwen3_tts/codec_roundtrip.wav
+  - backend: qwen3_tts
+    kind: zero_shot
+    output: qwen3_tts/zero_shot.wav
