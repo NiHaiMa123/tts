@@ -364,6 +364,257 @@ function clearRatings() {
 """
 
 
+_LORA_PILOT_TEMPLATE = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>__TITLE__</title>
+<style>
+  body { font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+         margin: 24px; background: #15171c; color: #e8e9eb; }
+  h1 { font-size: 1.4rem; }
+  .meta { color: #9aa0a8; font-size: .85rem; margin-bottom: 14px;
+          white-space: pre-line; }
+  .calib { border: 1px solid #2c313a; border-radius: 8px; padding: 12px;
+           margin-bottom: 18px; background: #191d24; }
+  .calib h2 { font-size: 1rem; margin: 0 0 8px; color: #9fc1ff; }
+  .pack { margin: 18px 0; border: 1px solid #2c313a; border-radius: 8px; }
+  .pack-head { padding: 10px 14px; display: flex; gap: 12px;
+               align-items: center; cursor: pointer; }
+  .pack-head h2 { font-size: 1rem; margin: 0; color: #9fc1ff; flex: 1; }
+  .pack-body { padding: 0 14px 14px; }
+  .pair { border-top: 1px solid #242932; padding: 12px 0; }
+  .pair-head { font-weight: 600; margin-bottom: 8px; }
+  .side { display: inline-block; margin-right: 26px; vertical-align: top; }
+  audio { width: 250px; }
+  .sub { color: #9aa0a8; font-size: .78rem; }
+  .choice label { margin-right: 14px; font-size: .9rem; }
+  .tags label { margin-right: 10px; font-size: .82rem; color: #c9cdd4; }
+  .fi { margin-top: 8px; font-size: .84rem; }
+  select, input[type=text], input[type=number] { background: #0f1115;
+    color: #e8e9eb; border: 1px solid #2c313a; border-radius: 4px;
+    padding: 2px 4px; }
+  input[type=number] { width: 60px; }
+  input[type=text].wide { width: 140px; }
+  button { background: #2d6cdf; color: #fff; border: 0; border-radius: 6px;
+           padding: 8px 14px; cursor: pointer; font-size: .9rem;
+           margin-right: 8px; }
+  button.secondary { background: #333a45; }
+  button.fatigue { background: #8a4b2a; }
+  .toolbar { margin: 14px 0; }
+  .dup { color: #d8b45a; font-size: .8rem; }
+  .progress { color: #9aa0a8; font-size: .8rem; }
+  details { margin-top: 6px; }
+  .revealed .identity { display: inline; }
+  .identity { display: none; color: #d8b45a; font-size: .78rem; }
+  .stopped { opacity: .55; }
+</style>
+</head>
+<body>
+<h1>__TITLE__</h1>
+<div class="meta" id="meta"></div>
+<div class="toolbar">
+  <button onclick="exportRatings()">导出评价 JSON</button>
+  <button class="secondary" onclick="toggleReveal()">解盲/隐藏真实标签</button>
+  <button class="secondary" onclick="location.hash='calib'">回到参考校准</button>
+  <button class="fatigue" onclick="markFatigue()">听麻木了/分不出来
+    (UNCERTAIN_FATIGUE)</button>
+  <button class="secondary" onclick="clearRatings()">清空</button>
+  <span class="sub">每对先听哪边是随机且隐藏的；不要回放到听习惯为止——
+    第一次听到就可以标记缺陷。疲劳请直接点橙色按钮停止，不要把
+    「无差异」当疲劳。</span>
+</div>
+<div class="calib" id="calib">
+  <h2>参考校准（先听原声，再开始配对）</h2>
+  <div class="side"><div class="sub">干净原声（雨景，validation 真实录音）</div>
+    <audio controls preload="auto" src="../reference_clean.wav"></audio></div>
+  <div class="side"><div class="sub">Prompt P0 参考音频</div>
+    <audio controls preload="none" src="../prompt_P0.wav"></audio></div>
+</div>
+<div id="packs"></div>
+<script>
+const DATA = __SAMPLES__;
+const KEY = "tts-lora-pilot-" + location.pathname;
+let ratings = {}, session = {};
+try {
+  const saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+  ratings = saved.ratings || {}; session = saved.session || {};
+} catch (e) {}
+document.getElementById("meta").textContent = DATA.meta;
+if (session.fatigue) document.body.classList.add("stopped");
+
+function persist() {
+  localStorage.setItem(KEY, JSON.stringify({ratings, session}));
+}
+function markFatigue() {
+  session.fatigue = true;
+  session.stopped_at = new Date().toISOString();
+  persist();
+  document.body.classList.add("stopped");
+  alert("已记录 UNCERTAIN_FATIGUE。可以直接导出并停止本轮——疲劳样本不计入胜负。");
+}
+
+const root = document.getElementById("packs");
+for (const pack of DATA.packs) {
+  const wrap = document.createElement("div");
+  wrap.className = "pack";
+  const body = document.createElement("div");
+  body.className = "pack-body";
+  body.style.display = pack.collapsed ? "none" : "block";
+  const head = document.createElement("div");
+  head.className = "pack-head";
+  head.innerHTML = `<h2>${pack.title}</h2>
+    <span class="progress" data-prog="${pack.pack_id}"></span>
+    <button class="secondary">${pack.collapsed ? "展开本组" : "收起"}</button>`;
+  head.querySelector("button").onclick = (e) => {
+    e.stopPropagation();
+    body.style.display = body.style.display === "none" ? "block" : "none";
+  };
+  head.onclick = () => {
+    body.style.display = body.style.display === "none" ? "block" : "none";
+  };
+  wrap.appendChild(head);
+
+  for (const pair of pack.pairs) {
+    const rated = ratings[pair.pair_id] || {};
+    const card = document.createElement("div");
+    card.className = "pair";
+    const sidesHtml = pair.sides.map((s, i) => {
+      const tag = i === 0 ? "甲" : "乙";
+      return `<div class="side">
+        <div><b>${tag}</b>
+          <span class="identity">${s.case_id}</span>
+          ${s.duplicate_sha ? '<span class="dup">同SHA重复样本</span>' : ""}
+        </div>
+        ${s.src ? `<audio controls preload="none" src="${s.src}"></audio>
+          <div class="sub">${s.duration}s</div>`
+        : `<div class="sub">缺失: ${s.error || "?"}</div>`}
+      </div>`;
+    }).join("");
+
+    const choiceName = "c_" + pair.pair_id;
+    const choices = [["A", "甲更好"], ["B", "乙更好"],
+                     ["TIE", "无明显差异"], ["UNCERTAIN", "暂无法判断"]]
+      .map(([v, lab]) =>
+        `<label><input type="radio" name="${choiceName}" value="${v}"
+          ${rated.choice === v ? "checked" : ""}
+          onchange="saveChoice('${pair.pair_id}', this.value)"> ${lab}</label>`)
+      .join("");
+
+    const tags = DATA.defect_tags.map(t =>
+      `<label><input type="checkbox" ${((rated.defect_tags || []).includes(t)) ? "checked" : ""}
+        onchange="saveTags('${pair.pair_id}', this)"> ${t}</label>`)
+      .join("");
+
+    card.innerHTML = `
+      <div class="pair-head">配对 ${pair.pair_id}
+        <span class="sub">${pair.text_id} · seed ${pair.seed}</span>
+        <span class="identity">${pair.cells.join(" vs ")}</span></div>
+      ${sidesHtml}
+      <div class="choice">${choices}</div>
+      <div class="fi">
+        <label><input type="checkbox" ${rated.first_impression ? "checked" : ""}
+          onchange="saveFI('${pair.pair_id}', 'first_impression', this.checked)">
+          第一次听到即标记缺陷（first_impression）</label>
+        严重度 <select onchange="saveFI('${pair.pair_id}','severity',this.value)">
+          <option value=""></option>
+          ${["轻微","明显","严重"].map(v =>
+            `<option ${rated.severity === v ? "selected" : ""}>${v}</option>`).join("")}
+        </select>
+        片段(选填) <input type="number" step="0.1" placeholder="起s"
+          value="${rated.segment_start || ""}"
+          onchange="saveFI('${pair.pair_id}','segment_start',this.value)">
+        – <input type="number" step="0.1" placeholder="止s"
+          value="${rated.segment_end || ""}"
+          onchange="saveFI('${pair.pair_id}','segment_end',this.value)">
+      </div>
+      <div class="tags">最突出问题：${tags}</div>
+      <details><summary class="sub">可选：四维 1-5 评分（非必填，不作主判据）</summary>
+        ${["clarity","grit","likeness","naturalness"].map(d =>
+          `<label class="sub">${d}
+            <select onchange="saveFI('${pair.pair_id}','${d}',this.value)">
+              <option value=""></option>
+              ${[1,2,3,4,5].map(v =>
+                `<option ${rated[d] == v ? "selected" : ""}>${v}</option>`).join("")}
+            </select></label>`).join("")}
+      </details>
+      <div><input type="text" class="wide" placeholder="备注"
+        value="${(rated.notes || "").replace(/"/g, "&quot;")}"
+        onchange="saveFI('${pair.pair_id}','notes',this.value)"></div>`;
+    body.appendChild(card);
+  }
+  wrap.appendChild(body);
+  root.appendChild(wrap);
+}
+updateProgress();
+
+function touch(pair_id) {
+  ratings[pair_id] = ratings[pair_id] || {};
+  ratings[pair_id].rated_at = new Date().toISOString();
+}
+function saveChoice(pair_id, v) { touch(pair_id); ratings[pair_id].choice = v; persist(); updateProgress(); }
+function saveTags(pair_id, el) {
+  touch(pair_id);
+  const card = el.closest(".pair");
+  ratings[pair_id].defect_tags = [...card.querySelectorAll(".tags input:checked")]
+    .map(x => x.parentElement.textContent.trim());
+  persist();
+}
+function saveFI(pair_id, dim, v) { touch(pair_id); ratings[pair_id][dim] = v; persist(); }
+function updateProgress() {
+  for (const pack of DATA.packs) {
+    const done = pack.pairs.filter(p => (ratings[p.pair_id] || {}).choice).length;
+    const el = document.querySelector(`[data-prog="${pack.pack_id}"]`);
+    if (el) el.textContent = `${done}/${pack.pairs.length} 已评`;
+  }
+}
+function toggleReveal() { document.body.classList.toggle("revealed"); }
+function exportRatings() {
+  const pairs = {};
+  for (const pack of DATA.packs)
+    for (const pair of pack.pairs) {
+      const r = ratings[pair.pair_id];
+      const blind = {};
+      pair.sides.forEach((s, i) => blind[i === 0 ? "A" : "B"] = s.case_id);
+      pairs[pair.pair_id] = {
+        batch: pack.pack_id,
+        blind_order: blind,
+        ...(r ? {...r,
+          choice_real: r.choice === "A" ? blind.A :
+                       r.choice === "B" ? blind.B : r.choice || null}
+        : {status: session.fatigue ? "UNCERTAIN_FATIGUE"
+                                   : "PENDING_USER_LISTENING"}),
+      };
+    }
+  const blob = new Blob([JSON.stringify({
+    experiment_id: DATA.experiment_id,
+    page: location.pathname,
+    exported_at: new Date().toISOString(),
+    session: {fatigue: !!session.fatigue,
+              started_at: session.started_at || null,
+              stopped_at: session.stopped_at || null},
+    truth: DATA.truth,
+    pairs,
+  }, null, 2)], {type: "application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "listen-ratings-lora-pilot.json";
+  a.click();
+}
+function clearRatings() {
+  if (!confirm("清除本页所有已保存评价？")) return;
+  ratings = {}; session = {};
+  localStorage.removeItem(KEY);
+  location.reload();
+}
+session.started_at = session.started_at || new Date().toISOString();
+persist();
+</script>
+</body>
+</html>
+"""
+
+
 def _duration_sr(path: Path) -> tuple[float | str, int | str]:
     try:
         import soundfile as sf
@@ -472,6 +723,106 @@ def write_phase5a_listen_page(output_dir: str | Path,
     page = _PHASE5A_TEMPLATE.replace(
         "__TITLE__", html.escape(
             f"Phase 5A 盲听 — {manifest.get('experiment_id')}")).replace(
+        "__SAMPLES__", json.dumps(payload, ensure_ascii=False))
+    out = listen_dir / "index.html"
+    out.write_text(page, encoding="utf-8")
+    (listen_dir / "unblind_map.json").write_text(
+        json.dumps(unblind, ensure_ascii=False, indent=2), encoding="utf-8")
+    return out
+
+
+DEFECT_TAGS = ["磨砂/粗糙", "前顶/舌位", "空腔/口型大", "语速/停顿",
+               "音色不符", "漏字/错读", "金属感", "其他"]
+
+
+def write_lora_pilot_listen_page(output_dir: str | Path,
+                                 manifest: dict[str, Any],
+                                 rng_seed: int = 20261008) -> Path:
+    """Low-fatigue paired A/B page for the LoRA pilot (PLAN 25.7).
+
+    - pack1 shown by default (4 pairs), later packs collapsed
+    - per pair: two blinded sides (甲/乙), deterministic shuffle per
+      pair_id; side order balanced across pairs
+    - choice + defect tags + first_impression + optional scores
+    - UNCERTAIN_FATIGUE session flag; same-sha pairs flagged as
+      duplicate evidence, never counted twice
+    """
+    import random
+
+    output_dir = Path(output_dir)
+    listen_dir = output_dir / "listen"
+    listen_dir.mkdir(parents=True, exist_ok=True)
+
+    cases = {c["case_id"]: c for c in manifest.get("cases") or []}
+    sha_count: dict[str, int] = {}
+    for c in cases.values():
+        if c.get("output_sha256"):
+            sha_count[c["output_sha256"]] = \
+                sha_count.get(c["output_sha256"], 0) + 1
+
+    def _side(case_id: str) -> dict[str, Any] | None:
+        c = cases.get(case_id)
+        if not c:
+            return None
+        rel = c.get("output")
+        src = f"../{rel}" if rel else None
+        dur, sr = _duration_sr(output_dir / rel) if rel else ("?", "?")
+        return {"case_id": case_id, "condition": c.get("condition"),
+                "src": src, "sha256": c.get("output_sha256"),
+                "duration": dur, "sample_rate": sr,
+                "error": None if c.get("status") == "ok"
+                else (c.get("error") or c["status"]),
+                "duplicate_sha": bool(c.get("output_sha256")
+                                      and sha_count.get(
+                                          c["output_sha256"], 0) > 1)}
+
+    packs_payload, unblind = [], {}
+    for pack in manifest.get("packs") or []:
+        pairs = []
+        for pid in pack.get("pairs") or []:
+            pair = next((p for p in manifest.get("pairs") or []
+                         if p["pair_id"] == pid), None)
+            if not pair:
+                continue
+            cells = [s for s in (_side(c) for c in pair["cells"]) if s]
+            rng = random.Random(f"{rng_seed}:{pid}")
+            order = list(range(len(cells)))
+            rng.shuffle(order)
+            sides = [cells[i] for i in order]
+            pairs.append({"pair_id": pid,
+                          "text_id": pair["text_id"],
+                          "seed": pair["seed"],
+                          "cells": [s["case_id"] for s in cells],
+                          "sides": sides})
+            for i, s in enumerate(sides):
+                unblind[f"{pid}:{'甲乙'[i]}"] = s["case_id"]
+        packs_payload.append({"pack_id": pack["pack_id"],
+                              "title": pack["title"],
+                              "collapsed": pack.get("collapsed", False),
+                              "pairs": pairs})
+
+    truth = {c["case_id"]: {"condition": c.get("condition"),
+                            "checkpoint": c.get("checkpoint"),
+                            "output_sha256": c.get("output_sha256")}
+             for c in cases.values()}
+    payload = {
+        "experiment_id": manifest.get("experiment_id"),
+        "defect_tags": DEFECT_TAGS,
+        "meta": (
+            f"实验 {manifest.get('experiment_id')} · "
+            f"backend {manifest.get('backend')} · "
+            f"rev {str(manifest.get('model', {}).get('revision'))[:12]}\n"
+            "先听参考原声校准 → 每组 3–5 对：甲/乙随机隐藏（同文同 "
+            "seed，唯一变量是 checkpoint）。每对选「甲更好/乙更好/无"
+            "明显差异/暂无法判断」+ 最突出问题标签；可选标首次印象。"
+            "疲劳点橙色按钮停止，未听项保持 PENDING_USER_LISTENING。"),
+        "packs": packs_payload,
+        "truth": truth,
+    }
+    page = _LORA_PILOT_TEMPLATE.replace(
+        "__TITLE__", html.escape(
+            f"Phase 5B LoRA pilot 低疲劳 A/B — "
+            f"{manifest.get('experiment_id')}")).replace(
         "__SAMPLES__", json.dumps(payload, ensure_ascii=False))
     out = listen_dir / "index.html"
     out.write_text(page, encoding="utf-8")

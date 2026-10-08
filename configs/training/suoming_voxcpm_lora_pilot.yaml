@@ -1,0 +1,36 @@
+# Phase 5B LoRA pilot — auditable copy of the OFFICIAL VoxCPM2 template
+# upstream: OpenBMB/VoxCPM conf/voxcpm_v2/voxcpm_finetune_lora.yaml
+#           @ tag 2.0.3 (commit 19b6bf7590025418821a86dcb817504e0ad7e5df)
+# entry:    scripts/train_voxcpm_finetune.py --config_path <this file>
+# Deviations from template are marked "# PILOT:".
+pretrained_path: E:/project/tts/hf_cache/voxcpm2/models--openbmb--VoxCPM2/snapshots/32279effe8c19989596f05d353d1447f51d9e915  # PILOT: pinned base revision 32279eff
+train_manifest: E:/project/tts/outputs/training/suoming_voxcpm_lora_pilot/train.jsonl      # PILOT: frozen train-split export
+val_manifest: E:/project/tts/outputs/training/suoming_voxcpm_lora_pilot/val_metrics.jsonl  # PILOT: loss logging only, never trained
+sample_rate: 16000         # AudioVAE encoder input rate (asserted == model.audio_vae.sample_rate)
+out_sample_rate: 48000     # AudioVAE decoder output rate (monitoring only)
+batch_size: 1              # PILOT: template=2 -> 1 for 16GB VRAM (plan-approved default)
+grad_accum_steps: 8        # effective batch = 8
+num_workers: 0             # PILOT: template=8 -> 0 (Windows spawn safety)
+num_iters: 150             # PILOT: hard cap = 150 OPTIMIZER steps (outer loop iterations)
+log_interval: 10
+valid_interval: 50         # PILOT: val loss every 50 steps
+save_interval: 50          # step_0000050 / step_0000100 / step_0000150
+learning_rate: 0.0001
+weight_decay: 0.01
+warmup_steps: 10           # PILOT: template=100 -> 10 (150-step budget)
+max_steps: 150             # scheduler horizon == num_iters
+max_batch_tokens: 8192     # official length filter, keeps long-tail samples OOM-safe
+max_grad_norm: 1.0
+save_path: E:/project/tts/outputs/training/suoming_voxcpm_lora_pilot/checkpoints
+tensorboard: E:/project/tts/outputs/training/suoming_voxcpm_lora_pilot/tb
+lambdas:
+  loss/diff: 1.0
+  loss/stop: 1.0
+
+lora:                      # lm+dit per plan; r/alpha 16 pilot values, not claimed optimal
+  enable_lm: true
+  enable_dit: true
+  enable_proj: false
+  r: 16
+  alpha: 16
+  dropout: 0.0

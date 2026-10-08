@@ -1,0 +1,52 @@
+# Phase 5B pilot eval — base zero-shot vs LoRA step50/100/150
+# (PLAN.md section 25.5). P0 is the fixed reference for EVERY cell;
+# P2 never enters this comparison. Only the adapter varies.
+experiment_id: suoming_voxcpm_lora_pilot_v1
+output_dir: outputs/gates/suoming_voxcpm_lora_pilot_v1
+character: suoming
+backend: voxcpm2
+snapshot: E:/project/tts/hf_cache/voxcpm2/models--openbmb--VoxCPM2/snapshots/32279effe8c19989596f05d353d1447f51d9e915
+train_manifest: outputs/training/suoming_voxcpm_lora_pilot/train.jsonl
+
+checkpoints:
+  "50":  {path: outputs/training/suoming_voxcpm_lora_pilot/checkpoints/step_0000050}
+  "100": {path: outputs/training/suoming_voxcpm_lora_pilot/checkpoints/step_0000100}
+  "150": {path: outputs/training/suoming_voxcpm_lora_pilot/checkpoints/step_0000150}
+
+lora:           # identical to configs/training/suoming_voxcpm_lora_pilot.yaml
+  enable_lm: true
+  enable_dit: true
+  enable_proj: false
+  r: 16
+  alpha: 16
+  dropout: 0.0
+
+prompts:
+- id: P0
+  role: baseline
+  audio: ${DOTSTTS_ROOT}/data/inbox/锁暝/中立_neutral/【中立_neutral】谛天鉴除了处理岁主事务，也掌管天文、历法。各州分鉴各有职责，梦州也有自己——唔……先前御者说对谛天鉴了解不多，不知不觉话多了些。总之，谛天鉴为岁主尽责，那自然，.wav
+  sha256: c4322e3230ab952edb7cd456329cb5b48195d9f33c5459c0ba76d8d79d3a7f92
+  text: 谛天鉴除了处理岁主事务，也掌管天文、历法。各州分鉴各有职责，梦州也有自己——唔……先前御者说对谛天鉴了解不多，不知不觉话多了些。总之，谛天鉴为岁主尽责，那自然，御者若有所求，无论缘由，我都会回应。
+
+texts:
+- id: rain
+  split: validation
+  source: datasets/suoming/v1/validation.jsonl#11 fid=bf38867d624e76e1
+  text: 午后凉风拂过，雨云渐聚，细雨敲在屋檐上。我坐在窗边听雨，拭去玄朱锁上的薄尘。这确实是有些凄迷的场景，但……我很喜欢。
+- id: short_response
+  split: validation
+  source: datasets/suoming/v1/validation.jsonl#3 fid=4256545f053373b0
+  text: 开伞，由我来动手。
+- id: short_response_2
+  split: test
+  source: datasets/suoming/v1/test.jsonl#14 fid=c3dbe43cdc84
+  text: 有什么在跟着我们
+- id: mid_exposition
+  split: validation
+  source: datasets/suoming/v1/validation.jsonl#2 fid=33e707acde1f4e22
+  text: 若论诞生年岁，心月狐还比我小些，加之我协助「岁主」已久，见祂走到今日，难免心生欣慰。无论是昔日独自重塑「文明之匣」，还是如今真正成为「岁主」，心月狐都未曾辜负「岁主」的期望。
+
+# Read-only sources for the six sha-verified base cells.
+reuse_sources:
+  phase5a: outputs/gates/suoming_voxcpm_phase5a
+  phase5a2: outputs/gates/suoming_voxcpm_phase5a2
