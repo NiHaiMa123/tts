@@ -41,6 +41,18 @@ def _maybe_crash(method):
         os._exit(2)
 
 
+def _maybe_slow(method):
+    """FAKE_SLOW_MS=<ms> sleeps that long before answering a method
+    listed in FAKE_SLOW_ON (default: generate)."""
+    ms = int(os.environ.get("FAKE_SLOW_MS") or 0)
+    if not ms:
+        return
+    targets = os.environ.get("FAKE_SLOW_ON", "generate").split(",")
+    if method in (t.strip() for t in targets):
+        import time
+        time.sleep(ms / 1000.0)
+
+
 def _write_sine(path, seconds=0.2, sr=8000, freq=440.0):
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     n = int(sr * seconds)
@@ -69,6 +81,7 @@ def _capabilities():
 
 def handle(method, params):
     _maybe_crash(method)
+    _maybe_slow(method)
     if method == "health":
         if os.environ.get("FAKE_NO_HEALTH"):
             import time

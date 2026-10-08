@@ -219,9 +219,13 @@ class DotsWorker(WorkerServer):
 
         t0 = time.monotonic()
         with torch.inference_mode():
-            # Official VAE reconstruction path: extract_latents ->
-            # inference_from_latents (posterior sample -> decode).
-            recon = vae.inference({"sample": wav})["sample"]
+            # Deterministic reconstruction: encode to posterior params,
+            # take the posterior mean m_q, decode with do_sample=False.
+            # vae.inference() would sample z ~ q(z|x) — stochastic, so it
+            # cannot be compared across runs (or to the grit diagnostic).
+            latents = vae.extract_latents(wav)          # [B, 2*latent_dim, T]
+            m_q = latents[:, : int(vae.h.latent_dim), :]
+            recon = vae.inference_from_latents(m_q, do_sample=False)
         wall = time.monotonic() - t0
         recon_np = recon.float().cpu().squeeze().numpy().astype(np.float32)
 
@@ -235,7 +239,9 @@ class DotsWorker(WorkerServer):
             "output_path": str(output_path),
             "wall_seconds": wall,
             "metadata": {"codec": "AudioVAE(bigvgan-style)",
-                          "hop_size": int(vae.hop_size)},
+                          "hop_size": int(vae.hop_size),
+                          "reconstruction": "posterior_mean",
+                          "deterministic": True},
         }
 
     def handle_shutdown(self, params: dict) -> dict:

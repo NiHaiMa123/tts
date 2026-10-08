@@ -43,14 +43,20 @@ def _sha(path: Path) -> str:
 @pytest.fixture
 def character(tmp_path):
     ref = tmp_path / "ref.wav"
+    gt = tmp_path / "gt.wav"
     _wav(ref)
+    _wav(gt, seconds=0.15)
     return CharacterProfile(
         character_id="suoming",
         display_name="锁暝",
         dataset={},
         reference={"audio": str(ref), "text": "ref text",
                    "sha256": _sha(ref)},
-        evaluation={"anchor_texts": [{"id": "rain", "text": "anchor"}]},
+        evaluation={"anchor_texts": [
+            {"id": "rain", "text": "anchor",
+             "audio": str(gt), "sha256": _sha(gt),
+             "source": "validation.jsonl"},
+        ]},
     )
 
 
@@ -134,6 +140,9 @@ def test_gate_end_to_end(tmp_path, character, monkeypatch):
     assert sidecar["seed"] == 42
     assert sidecar["output_sha256"] == _sha(out_dir / "fake" / "zero.wav")
     assert (out_dir / "reference_original.wav").is_file()
+    assert (out_dir / "ground_truth_original.wav").is_file()
+    assert report["ground_truth"]["sha256"] == _sha(
+        Path(character.ground_truth["audio"]))
     assert (out_dir / "metrics.json").is_file()
     assert (out_dir / "report.json").is_file()
 
@@ -142,6 +151,28 @@ def test_gate_end_to_end(tmp_path, character, monkeypatch):
     assert paths["listen_page"].is_file()
     html = paths["listen_page"].read_text(encoding="utf-8")
     assert "zero.wav" in html
+
+
+def test_codec_roundtrip_blocked_without_ground_truth(tmp_path, character,
+                                                      monkeypatch):
+    """No ground truth -> codec case blocked, never silently prompt-based."""
+    character.evaluation["anchor_texts"] = [{"id": "rain", "text": "anchor"}]
+    cfgs = _fake_backend(tmp_path, monkeypatch, backend_id="fake")
+    monkeypatch.setattr(
+        "character_tts.evaluation.gate.load_backend",
+        lambda name: loader.load_backend(str(cfgs / f"{name}.yaml")),
+    )
+    ev = _eval_cfg(tmp_path, [
+        GateCase(backend="fake", kind="codec_roundtrip",
+                 output="fake/roundtrip.wav"),
+    ])
+    mgr = BackendManager(logs_dir=tmp_path / "logs")
+    try:
+        report = run_gate(ev, character, manager=mgr)
+    finally:
+        mgr.stop()
+    assert report["cases"][0]["status"] == "blocked"
+    assert "ground truth" in report["cases"][0]["reason"]
 
 
 def test_gate_case_error_does_not_abort_others(tmp_path, character,

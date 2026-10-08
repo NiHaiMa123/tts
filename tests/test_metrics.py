@@ -59,8 +59,37 @@ def test_temporal_delta_positive_for_mixed_signal():
 
 def test_analyze_audio_bundle():
     out = analyze_audio(_sine(3000), SR)
-    for key in ("duration", "sample_rate", "rms_dbfs", "true_peak_dbtp",
-                "band_energy_4k_8k", "spectral_flatness",
-                "temporal_delta_2k_9k"):
+    for key in ("duration", "sample_rate", "analysis_sr", "rms_dbfs",
+                "true_peak_dbtp", "band_energy_4k_8k",
+                "spectral_flatness", "temporal_delta_2k_9k"):
         assert key in out
     assert out["duration"] == pytest.approx(1.0, abs=0.01)
+
+
+def test_shared_band_metrics_comparable_across_rates():
+    """Same 8 kHz-dominant signal at 48 kHz vs its 24 kHz version must
+    produce nearly identical shared-band numbers — the whole point of
+    analyzing at a common rate."""
+    from scipy import signal as _sig
+
+    rng = np.random.default_rng(0)
+    base = (_sine(6000, seconds=1.0, amp=0.4)
+            + _sine(2000, seconds=1.0, amp=0.3)
+            + rng.normal(0, 0.02, SR))
+    at_48 = analyze_audio(base, SR)
+    down = _sig.resample_poly(base, 1, 2)
+    at_24 = analyze_audio(down, 24000)
+    assert at_48["analysis_sr"] == 24000 == at_24["analysis_sr"]
+    for key in ("band_energy_4k_8k", "band_energy_8k_12k",
+                "temporal_delta_2k_9k"):
+        assert at_48[key] == pytest.approx(at_24[key], abs=0.02)
+
+
+def test_native_hf_context_only_when_supported():
+    x = _sine(15000, amp=0.3) + _sine(3000, amp=0.5)
+    out48 = analyze_audio(x, SR)
+    assert out48["native_energy_above_12k"] is not None
+    assert out48["native_energy_above_12k"] > 0.1
+    down = _sine(3000, amp=0.5, sr=24000)
+    out24 = analyze_audio(down, 24000)
+    assert out24["native_energy_above_12k"] is None

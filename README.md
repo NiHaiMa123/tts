@@ -24,11 +24,18 @@ workers/           各后端薄适配（运行在 backend 自己的 env 里）
 约束（见 PLAN.md）：
 
 - 一次只驻留一个大模型（RTX 5080 16GB）；切换后端 = shutdown → 等退出
-  → 确认 → 启动 → health check
+  → 确认 → 启动 → health check；生成进行中 switch/stop/ensure 一律拒绝
 - 先 codec roundtrip，再 zero-shot，人工试听通过才允许训练
+- clone prompt（`reference`，25s 谛天鉴）与评测原声（anchor 的
+  `ground_truth`，validation 真录「午后凉风拂过…」21.2s）严格分离：
+  codec roundtrip 重建 ground truth，zero-shot 才用 clone prompt
+- Dots codec roundtrip = 确定性后验均值重建（extract_latents → m_q →
+  do_sample=False），与 dotstts 磨砂诊断可比较；不做随机采样
 - 不允许任何单一客观指标宣布质量胜负；主观评分保留人工
-- 下载顺序：本地 cache → 已有镜像配置 → hf-mirror.com → 127.0.0.1:7897
-  代理；每次下载写 logs/downloads.jsonl
+- 下载顺序：本地 cache → hf-mirror.com → 127.0.0.1:7897
+  代理；revision 固定、每次下载写 logs/downloads.jsonl
+- 频谱类指标统一在 analysis_sr=24kHz 公共带内比较（24k vs 48k
+  不可比高频不进对比表；native>12k 仅作 metrics.json 描述项）
 
 ## 环境准备
 
@@ -69,7 +76,8 @@ powershell -File scripts/bootstrap/setup_qwen3_tts.ps1      # venv+torch cu128+q
 
 ```text
 outputs/gates/suoming_v1/
-  reference_original.wav          # 原声参考（sha256 校验）
+  reference_original.wav          # 克隆参考（谛天鉴 25s, sha256 校验）
+  ground_truth_original.wav       # 评测原声（午后凉风 21.2s validation）
   <backend>/*.wav + *.wav.json    # 每样本 sidecar provenance
   metrics.json  report.md  report.json
   listen/index.html               # 试听评分页（localStorage，可导出）

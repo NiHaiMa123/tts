@@ -1,10 +1,14 @@
-# 锁暝 backend gate v1 — 平台验收报告
+# 锁暝 backend gate v1 — 平台验收报告（v2 修订）
 
 - 评测 ID: `suoming_v1`
 - 角色: `suoming`（锁暝）
-- 生成时间: 2026-10-07（UTC+8）
+- 生成时间: 2026-10-08（UTC+8）
 - 种子: 42
-- 参考音频 sha256: `c4322e3230ab952edb7cd456329cb5b48195d9f33c5459c0ba76d8d79d3a7f92`
+- 克隆参考（prompt）sha256: `c4322e3230ab952edb7cd456329cb5b48195d9f33c5459c0ba76d8d79d3a7f92`
+- 评测原声（ground truth）sha256: `0745cd41cc9d07e544ab83b9c9db43ac5d355fe2d4765ec970494fd0275693ab`
+  - `data/work/standardized/fb/fb8e3c08…aac1ca.wav`，48 kHz / 21.18 s，
+    文本=anchor「午后凉风拂过……」，来自 validation.jsonl（与 dotstts
+    磨砂诊断 REF_WAV 同一条）
 - 机器: RTX 5080 16GB / driver 591.86 / Windows
 - 数据权威来源（生成物，不进 git）:
   `outputs/gates/suoming_v1/report.json`、`metrics.json`、`report.md`
@@ -17,15 +21,38 @@
 
 | Backend | Env | Codec roundtrip | Zero-shot | 主观评分 | 建议训练 |
 |---|---|---|---|---|---|
-| dots_legacy (LoRA step500 基线) | yes | ok (2.9s) | ok (25.3s) | PENDING_USER_LISTENING | PENDING_USER_LISTENING |
-| voxcpm2 | yes | ok (0.1s) | ok (23.9s) | PENDING_USER_LISTENING | PENDING_USER_LISTENING |
-| qwen3_tts | yes | ok (5.1s) | ok (22.5s) | PENDING_USER_LISTENING | PENDING_USER_LISTENING |
+| dots_legacy (LoRA step500 基线) | yes | ok (41.6s, 确定性) | ok (20.3s) | PENDING_USER_LISTENING | PENDING_USER_LISTENING |
+| voxcpm2 | yes | ok (0.1s) | ok (27.7s) | PENDING_USER_LISTENING | PENDING_USER_LISTENING |
+| qwen3_tts | yes | ok (4.5s) | ok (23.6s) | PENDING_USER_LISTENING | PENDING_USER_LISTENING |
 
-dots_legacy 另完成 `generate`（已训练 LoRA 路径）ok (32.3s)。
+dots_legacy 另完成 `generate`（已训练 LoRA 路径）ok (5.4s)。
+
+## v2 修复内容（Phase 0–4 审查）
+
+1. **clone prompt 与评测 ground truth 分离**：importer 原取
+   validation.jsonl 第一条（「我始终想着…」），已改为按 anchor 文本精确
+   匹配（「午后凉风拂过…」，validation 第 12 条），写入
+   `anchor_texts[].audio/sha256/source` 并在 gate 中校验 sha256。codec
+   roundtrip 重建 ground truth；无 ground truth 的角色 → codec case
+   `blocked`（不再静默用 prompt）。zero-shot 仍用 25s 谛天鉴 prompt。
+2. **Dots codec roundtrip 确定性**：`vae.inference()` 内部
+   `do_sample=True` 会从后验采样，已改为 `extract_latents` → 取后验均值
+   m_q → `inference_from_latents(do_sample=False)`，可复现、可与
+   dotstts 磨砂诊断（同一 REF_WAV）比较。
+3. **WebUI 并发防护**：生成进行中 `switch`/`stop`/`ensure`（跨线程）
+   一律抛 `BackendBusyError`（API 409）；任务先 acquire generate gate
+   再 ensure（内部切换在 gate 内完成）；shutdown 等 30s 后 force_stop。
+   新增慢速 fake worker 并发测试。
+4. **Bootstrap**：改用 `huggingface_hub.snapshot_download`（revision 固定
+   为后端配置值），镜像失败回退 127.0.0.1:7897 时显式清除 HF_ENDPOINT，
+   downloads.jsonl 记录真实 resolved revision 与快照路径。
+5. **跨采样率频谱指标**：所有频谱指标在公共 analysis_sr=24 kHz 上计算，
+   对比表只含共享带（≤12 kHz）；`native_energy_above_12k` 作为 per-file
+   描述项留在 metrics.json，不进对比表。
 
 ## 环境与下载溯源
 
-下载顺序：本地 cache → HF_ENDPOINT 镜像 → `127.0.0.1:7897` 代理。
+下载顺序：本地 cache → hf-mirror.com 镜像 → `127.0.0.1:7897` 代理。
 全部记录见 `logs/downloads.jsonl`；未记录任何 token/凭据。
 
 | Asset | 来源 | Revision | 本地路径 |
@@ -42,43 +69,31 @@ gate 复现。
 
 | Backend | Python env | 包 | Peak VRAM |
 |---|---|---|---|
-| dots_legacy | `E:\project\dotstts\.venv` (py3.12, 复用) | dots.tts 0.3.1 | 6.2 GiB |
-| voxcpm2 | `backend_envs/voxcpm2` (py3.11) | voxcpm 2.0.3 + torch 2.11.0+cu128 | 6.1 GiB |
+| dots_legacy | `E:\project\dotstts\.venv` (py3.12, 复用) | dots.tts 0.3.1 | 10.5 GiB |
+| voxcpm2 | `backend_envs/voxcpm2` (py3.11) | voxcpm 2.0.3 + torch 2.11.0+cu128 | 6.3 GiB |
 | qwen3_tts | `backend_envs/qwen3_tts` (py3.11) | qwen-tts + torch 2.11.0+cu128 (attn=sdpa) | 4.6 GiB |
 
-## 客观指标（描述性，非评判）
+## 客观指标（描述性，非评判；公共带 ≤12 kHz）
 
-节选 `metrics.json`（完整字段含 RMS/LUFS/true-peak/频段能量/flatness/crest/
-频谱熵/2–9kHz 动态等）：
+节选 `metrics.json`（完整字段含 RMS/LUFS/true-peak/频段能量/flatness/
+crest/频谱熵/2–9kHz 动态/analysis_sr/native>12k 描述项）：
 
-| Sample | dur(s) | LUFS | TP dBTP | flatness | Δ2-9k |
-|---|---|---|---|---|---|
-| reference_original | 25.22 | -21.7 | -8.9 | 0.126 | 0.261 |
-| dots codec roundtrip | 25.24 | -22.0 | -8.6 | 0.063 | 0.237 |
-| voxcpm2 codec roundtrip | 25.24 | -21.8 | -6.9 | 0.134 | 0.243 |
-| qwen3_tts codec roundtrip | 25.28 | -22.4 | -9.5 | 0.327 | 0.368 |
-| dots zero-shot | 13.92 | -21.9 | -7.3 | 0.049 | 0.246 |
-| voxcpm2 zero-shot | 16.96 | -22.4 | -7.6 | 0.116 | 0.206 |
-| qwen3_tts zero-shot | 12.80 | -22.5 | -10.2 | 0.322 | 0.409 |
-
-可读差异（仅供人工试听时对照，不下结论）：qwen3_tts 为 24kHz 输出且
-12–18kHz 能量近零（codec 上限），voxcpm2/dots 为 48kHz；codec roundtrip 的
-flatness/Δ2-9k 差异提示各 codec 对参考样本的频谱重塑程度不同。
+| Sample | SR | dur(s) | LUFS | TP dBTP | E4-8k% | E8-12k% | flatness | Δ2-9k |
+|---|---|---|---|---|---|---|---|---|
+| ground_truth_original（原声） | 48000 | 21.18 | -21.5 | -8.2 | 0.037 | 0.066 | 0.401 | 0.279 |
+| dots codec roundtrip | 48000 | 21.20 | -21.9 | -8.3 | 0.031 | 0.054 | 0.407 | 0.268 |
+| voxcpm2 codec roundtrip | 48000 | 21.20 | -21.6 | -6.1 | 0.053 | 0.048 | 0.404 | 0.283 |
+| qwen3_tts codec roundtrip | 24000 | 21.20 | -22.5 | -8.6 | 0.030 | 0.026 | 0.332 | 0.280 |
+| dots zero-shot | 48000 | 13.92 | -21.9 | -7.3 | 0.040 | 0.092 | 0.335 | 0.406 |
+| voxcpm2 zero-shot | 48000 | 16.96 | -22.4 | -7.6 | 0.027 | 0.017 | 0.363 | 0.333 |
+| qwen3_tts zero-shot | 24000 | 12.80 | -22.5 | -10.2 | 0.027 | 0.018 | 0.322 | 0.409 |
 
 ## 试听入口
 
 `outputs/gates/suoming_v1/listen/index.html`（本地打开即可，评分存
-localStorage，可导出 JSON）。页面内为盲听布局：A/B/参考 三栏。
+localStorage，可导出 JSON）。排序：原声(validation) → 克隆参考 →
+各后端 codec/zero-shot/LoRA 样本。
 另有 WebUI：`scripts/start_webui.py` → http://127.0.0.1:7860 。
-
-## 已解决 / 记录的问题
-
-- qwen3_tts `Qwen3TTSModel.from_pretrained` 会无条件下探 HF API；已改为
-  `snapshot_download(local_files_only=True)` 预解析本地快照 + worker env
-  `HF_HUB_OFFLINE=1`，离线可复现。
-- `flash-attn` 在 sm_120 不可用，qwen3_tts 使用官方 `sdpa` 路径。
-- qwen-tts 依赖 SoX 二进制做部分音频转换；当前 codec/zero-shot 路径未
-  触发，若后续用到需安装 SoX（记为环境待办，非 gate 阻塞）。
 
 ## BLOCKED
 

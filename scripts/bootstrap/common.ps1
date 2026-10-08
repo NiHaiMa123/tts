@@ -41,34 +41,53 @@ function Test-HfMirror {
 
 function Invoke-HfDownload {
     <#
-    Download an HF model with resume, mirror-first then proxy fallback.
-    Returns $true on success. Every attempt is logged — no silent switching.
+    Download an HF model at a pinned revision, mirror-first then
+    127.0.0.1:7897 proxy fallback. Returns the resolved snapshot info on
+    success ($null on failure). Every attempt is logged — including the
+    real resolved revision and local path.
     #>
     param(
         [Parameter(Mandatory=$true)][string]$RepoId,
         [Parameter(Mandatory=$true)][string]$PythonExe,
-        [string]$CacheDir = ""
+        [string]$CacheDir = "",
+        [string]$Revision = ""
     )
-    $envPairs = @(
+    # snapshot_download returns the resolved snapshot dir whose final
+    # component is the commit hash — that is the provenance revision.
+    $code = @"
+import json, sys
+from huggingface_hub import snapshot_download
+p = snapshot_download(sys.argv[1],
+                      revision=(sys.argv[2] or None),
+                      cache_dir=(sys.argv[3] or None))
+print(json.dumps({"path": p,
+                  "revision": p.replace("\\", "/").split("snapshots/")[-1].rstrip("/")}))
+"@
+    $attempts = @(
         @{ Name = "mirror"; Vars = @{ HF_ENDPOINT = $Script:MirrorEndpoint } },
         @{ Name = "proxy";  Vars = @{
-            HTTP_PROXY = $Script:ProxyUrl
+            # Unset any inherited HF_ENDPOINT so requests hit huggingface.co
+            # through the local proxy instead of a (partial) mirror.
+            HF_ENDPOINT = $null
+            HTTP_PROXY  = $Script:ProxyUrl
             HTTPS_PROXY = $Script:ProxyUrl
-            ALL_PROXY  = $Script:ProxyUrl } }
+            ALL_PROXY   = $Script:ProxyUrl } }
     )
-    foreach ($attempt in $envPairs) {
+    foreach ($attempt in $attempts) {
         Write-Host "== download $RepoId via $($attempt.Name) =="
         $saved = @{}
         foreach ($k in $attempt.Vars.Keys) {
             $saved[$k] = [Environment]::GetEnvironmentVariable($k, "Process")
             [Environment]::SetEnvironmentVariable($k, $attempt.Vars[$k], "Process")
         }
+        $errFile = New-TemporaryFile
+        $ok = $false; $info = $null
         try {
-            $args = @("-m", "huggingface_hub.commands.huggingface_cli",
-                      "download", $RepoId)
-            if ($CacheDir) { $args += @("--cache-dir", $CacheDir) }
-            & $PythonExe @args
-            $ok = ($LASTEXITCODE -eq 0)
+            $out = & $PythonExe -c $code $RepoId $Revision $CacheDir 2>$errFile
+            if ($LASTEXITCODE -eq 0) {
+                $info = ($out | Select-Object -Last 1) | ConvertFrom-Json
+                $ok = $true
+            }
         } catch { $ok = $false }
         finally {
             foreach ($k in $attempt.Vars.Keys) {
@@ -77,15 +96,20 @@ function Invoke-HfDownload {
         }
         if ($ok) {
             Write-DownloadRecord -Asset $RepoId -SourceType $attempt.Name `
-                -ResolvedRevision "" -LocalPath $CacheDir -Success $true
-            return $true
+                -ResolvedRevision $info.revision -LocalPath $info.path `
+                -Success $true
+            return $info
         }
+        $errTail = (Get-Content $errFile -Raw -ErrorAction SilentlyContinue)
+        if ($errTail) { $errTail = $errTail.Trim() }
+        if ($errTail.Length -gt 300) { $errTail = $errTail.Substring(0, 300) }
+        Remove-Item $errFile -Force -ErrorAction SilentlyContinue
         Write-Host "   $($attempt.Name) attempt failed; trying next source"
         Write-DownloadRecord -Asset $RepoId -SourceType $attempt.Name `
             -ResolvedRevision "" -LocalPath $CacheDir -Success $false `
-            -Detail "exit code $LASTEXITCODE"
+            -Detail "exit $LASTEXITCODE; $errTail"
     }
-    return $false
+    return $null
 }
 
 function New-BackendVenv {

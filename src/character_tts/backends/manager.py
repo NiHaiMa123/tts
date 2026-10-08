@@ -48,6 +48,7 @@ class BackendManager:
         self._on_event = on_event
         self._lock = threading.Lock()      # serializes manager-level ops
         self._generate_lock = threading.Lock()  # non-blocking generate gate
+        self._generate_owner: int | None = None  # thread id holding the gate
         self._proc: subprocess.Popen[bytes] | None = None
         self._client: WorkerClient | None = None
         self._stderr_fh = None
@@ -77,9 +78,17 @@ class BackendManager:
         return self._logs_dir / f"{backend_id}.worker.log"
 
     # -- lifecycle --------------------------------------------------------------
+    def _require_not_busy(self, op: str) -> None:
+        if self.busy:
+            raise BackendBusyError(
+                f"cannot {op}: generation in progress"
+            )
+
     def start(self, profile: BackendProfile) -> dict[str, Any]:
         """Launch a worker and block until health check passes."""
+        self._require_not_busy("start worker")
         with self._lock:
+            self._require_not_busy("start worker")
             self._stop_locked()
             return self._start_locked(profile)
 
@@ -117,7 +126,16 @@ class BackendManager:
             return "<no worker log>"
 
     def ensure(self, profile: BackendProfile) -> WorkerClient:
-        """Return a client for ``profile``, switching backend if needed."""
+        """Return a client for ``profile``, switching backend if needed.
+
+        Internal worker switches are only allowed when no generation is in
+        flight on *another* thread — the gate holder itself may ensure
+        (that's how a job switches to its requested backend).
+        """
+        if (self._generate_lock.locked()
+                and self._generate_owner != threading.get_ident()):
+            raise BackendBusyError(
+                "cannot ensure/switch: generation in progress")
         with self._lock:
             if self._active_backend_id != profile.backend_id or not self.is_alive():
                 self._switch_locked(profile)
@@ -125,7 +143,9 @@ class BackendManager:
             return self._client
 
     def switch(self, profile: BackendProfile) -> dict[str, Any]:
+        self._require_not_busy("switch backend")
         with self._lock:
+            self._require_not_busy("switch backend")
             if self._active_backend_id == profile.backend_id and self.is_alive():
                 return self._client.health(timeout=30)
             return self._switch_locked(profile)
@@ -219,7 +239,19 @@ class BackendManager:
             self._stop_locked()
             raise
 
-    def stop(self) -> None:
+    def stop(self, wait_seconds: float = 0.0) -> None:
+        """Stop the worker. Refuses while a generation is in flight;
+        ``wait_seconds`` gives an in-flight job time to finish first."""
+        deadline = time.monotonic() + wait_seconds
+        while self.busy and time.monotonic() < deadline:
+            time.sleep(0.1)
+        self._require_not_busy("stop worker")
+        with self._lock:
+            self._require_not_busy("stop worker")
+            self._stop_locked()
+
+    def force_stop(self) -> None:
+        """Kill the worker even mid-generation — process teardown only."""
         with self._lock:
             self._stop_locked()
 
@@ -258,9 +290,13 @@ class BackendManager:
 
     # -- generation gate ------------------------------------------------------
     def acquire_generate(self) -> bool:
-        return self._generate_lock.acquire(blocking=False)
+        if not self._generate_lock.acquire(blocking=False):
+            return False
+        self._generate_owner = threading.get_ident()
+        return True
 
     def release_generate(self) -> None:
+        self._generate_owner = None
         self._generate_lock.release()
 
     @property

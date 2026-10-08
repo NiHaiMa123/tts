@@ -27,6 +27,9 @@ def _req(data: dict[str, Any], key: str, ctx: str) -> Any:
 class AnchorText:
     id: str
     text: str
+    audio: str | None = None
+    sha256: str | None = None
+    source: str | None = None
 
 
 @dataclass
@@ -43,7 +46,13 @@ class CharacterProfile:
     def anchor_texts(self) -> list[AnchorText]:
         out = []
         for item in self.evaluation.get("anchor_texts", []) or []:
-            out.append(AnchorText(id=str(item["id"]), text=str(item["text"])))
+            out.append(AnchorText(
+                id=str(item["id"]),
+                text=str(item["text"]),
+                audio=item.get("audio"),
+                sha256=item.get("sha256"),
+                source=item.get("source"),
+            ))
         return out
 
     @property
@@ -57,6 +66,25 @@ class CharacterProfile:
     @property
     def reference_sha256(self) -> str | None:
         return self.reference.get("sha256")
+
+    @property
+    def ground_truth(self) -> dict[str, Any] | None:
+        """Real recorded utterance for the first anchor text that has one.
+
+        Distinct from ``reference`` (the clone *prompt*): ground truth is the
+        evaluation original — codec roundtrips reconstruct it and generated
+        audio is compared against it. ``None`` when no anchor carries audio.
+        """
+        for anchor in self.anchor_texts:
+            if anchor.audio:
+                return {
+                    "anchor_id": anchor.id,
+                    "text": anchor.text,
+                    "audio": anchor.audio,
+                    "sha256": anchor.sha256,
+                    "source": anchor.source,
+                }
+        return None
 
 
 @dataclass

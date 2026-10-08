@@ -5,17 +5,31 @@ used to declare a quality winner; subjective listening stays authoritative.
 
 Implemented metrics (plan section 9):
   duration, sample_rate, rms_dbfs, lufs, true_peak_dbtp,
-  band energy ratios (4-8k, 8-12k, 12-18k),
+  band energy ratios (4-8k, 8-12k in the *shared* analysis band),
   voiced spectral flatness, spectral crest, spectral entropy,
   temporal spectral delta (2-9kHz), optional speaker cosine (hook only).
+
+Cross-rate comparability: backends emit different sample rates (24 kHz
+vs 48 kHz), so raw high-band numbers are not comparable. All spectral
+metrics are therefore computed on a common analysis rate (default
+24 kHz) and only bands inside the shared range are reported. Per-file
+native-band context (energy above 12 kHz when the file supports it) is
+kept as a descriptive field, never a comparison target.
 """
 
 from __future__ import annotations
+
+from math import gcd
 
 import numpy as np
 from scipy import signal
 
 _EPS = 1e-12
+
+#: Common rate for spectral metrics — the lowest native rate among the
+#: gate backends (Qwen 24 kHz). Bands above this Nyquist are excluded
+#: from cross-backend comparison.
+COMMON_ANALYSIS_SR = 24000
 
 
 def _db(x: float) -> float:
@@ -125,21 +139,45 @@ def temporal_spectral_delta(x: np.ndarray, sr: int,
     return float(np.mean(np.abs(np.diff(log_e))))
 
 
-def analyze_audio(x: np.ndarray, sr: int) -> dict[str, float | int | None]:
-    """Full metric bundle for one mono signal."""
+def _resample(x: np.ndarray, sr: int, target_sr: int) -> np.ndarray:
+    """Polyphase resample to ``target_sr`` (no-op when already equal)."""
+    if sr == target_sr or len(x) == 0:
+        return x
+    g = gcd(int(sr), int(target_sr))
+    return signal.resample_poly(x, target_sr // g, sr // g)
+
+
+def analyze_audio(x: np.ndarray, sr: int,
+                  analysis_sr: int = COMMON_ANALYSIS_SR
+                  ) -> dict[str, float | int | None]:
+    """Full metric bundle for one mono signal.
+
+    Loudness/peak/duration are computed at the native rate. Spectral
+    metrics run on a resampled copy at ``min(sr, analysis_sr)`` so every
+    file in a gate is compared inside the same band.
+    """
     x = np.asarray(x, dtype=np.float64)
+    xa_sr = min(int(sr), int(analysis_sr)) if sr else int(analysis_sr)
+    xa = _resample(x, int(sr), xa_sr) if sr else x
     out: dict[str, float | int | None] = {
         "sample_rate": int(sr),
+        "analysis_sr": int(xa_sr),
         "duration": float(len(x) / sr) if sr else 0.0,
         "rms_dbfs": rms_dbfs(x) if len(x) else None,
         "lufs": integrated_lufs(x, sr) if len(x) else None,
         "true_peak_dbtp": true_peak_dbtp(x, sr) if len(x) else None,
-        "band_energy_4k_8k": band_energy_ratio(x, sr, 4000, 8000),
-        "band_energy_8k_12k": band_energy_ratio(x, sr, 8000, 12000),
-        "band_energy_12k_18k": band_energy_ratio(x, sr, 12000, 18000),
-        "temporal_delta_2k_9k": temporal_spectral_delta(x, sr),
+        "band_energy_4k_8k": band_energy_ratio(xa, xa_sr, 4000, 8000),
+        "band_energy_8k_12k": band_energy_ratio(xa, xa_sr, 8000, 12000),
+        # Descriptive native-band context only — for files whose Nyquist
+        # exceeds 12 kHz this records how much energy the codec keeps up
+        # there; for lower-rate files it is None (not comparable).
+        "native_energy_above_12k": (
+            band_energy_ratio(x, sr, 12000, sr / 2.0)
+            if sr and sr / 2.0 > 12000 else None
+        ),
+        "temporal_delta_2k_9k": temporal_spectral_delta(xa, xa_sr),
     }
-    out.update(voiced_spectral_stats(x, sr))
+    out.update(voiced_spectral_stats(xa, xa_sr))
     return out
 
 

@@ -20,15 +20,20 @@ Install-Packages -PythonExe $py -Packages @(
 
 if (-not $SkipDownload) {
     $cacheDir = Join-Path $Script:RepoRoot "hf_cache\qwen3_tts"
-    foreach ($repo in @(
-        "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-        "Qwen/Qwen3-TTS-Tokenizer-12Hz"
-    )) {
-        $ok = Invoke-HfDownload -RepoId $repo -PythonExe $py -CacheDir $cacheDir
-        if (-not $ok) {
-            Write-DownloadRecord -Asset $repo -SourceType "failed" `
+    # Revisions pinned to match configs/backends/qwen3_tts.yaml.
+    $assets = @(
+        @{ Repo = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+           Rev  = "fd4b254389122332181a7c3db7f27e918eec64e3" },
+        @{ Repo = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
+           Rev  = "7dd38ad4e9bad454aae9cd937d0cd577604fe229" }
+    )
+    foreach ($a in $assets) {
+        $info = Invoke-HfDownload -RepoId $a.Repo -PythonExe $py `
+            -CacheDir $cacheDir -Revision $a.Rev
+        if (-not $info) {
+            Write-DownloadRecord -Asset $a.Repo -SourceType "failed" `
                 -ResolvedRevision "" -LocalPath $cacheDir -Success $false
-            throw "model download failed for $repo (see logs/downloads.jsonl)"
+            throw "model download failed for $($a.Repo) (see logs/downloads.jsonl)"
         }
     }
 }

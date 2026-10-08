@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import pytest
 
+import threading
+import time
+
 from character_tts.backends import protocol
 from character_tts.backends.manager import (
+    BackendBusyError,
     BackendManager,
     WorkerStartError,
 )
@@ -90,6 +94,73 @@ def test_generate_gate_rejects_concurrent(tmp_path, profile_factory):
         mgr.release_generate()
         assert mgr.acquire_generate() is True
         mgr.release_generate()
+    finally:
+        mgr.stop()
+
+
+def _generate_on_thread(mgr, profile, out_path, holder):
+    """Mirror the real call path: gate held, then ensure+generate."""
+    def run():
+        try:
+            if not mgr.acquire_generate():
+                holder["error"] = "gate busy"
+                return
+            try:
+                client = mgr.ensure(profile)
+                holder["result"] = client.generate(
+                    text="hi", output_path=str(out_path), timeout=30)
+            finally:
+                mgr.release_generate()
+        except Exception as exc:  # noqa: BLE001 - surfaced via holder
+            holder["error"] = exc
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    return t
+
+
+def test_switch_and_stop_refused_while_generating(tmp_path,
+                                                  profile_factory):
+    mgr = BackendManager(logs_dir=tmp_path)
+    holder: dict = {}
+    profile = profile_factory(
+        "fake_a", env={"FAKE_SLOW_MS": "800", "FAKE_SLOW_ON": "generate"})
+    try:
+        client = mgr.ensure(profile)
+        t = _generate_on_thread(mgr, profile, tmp_path / "g.wav", holder)
+        # Wait until the generate call is actually in flight.
+        deadline = time.monotonic() + 10
+        while not mgr.busy and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert mgr.busy
+        with pytest.raises(BackendBusyError):
+            mgr.switch(profile_factory("fake_b"))
+        with pytest.raises(BackendBusyError):
+            mgr.stop()
+        with pytest.raises(BackendBusyError):
+            mgr.ensure(profile_factory("fake_b"))
+        t.join(timeout=30)
+        assert not t.is_alive()
+        assert "result" in holder  # generation completed unharmed
+        assert mgr.active_backend_id == "fake_a"
+        assert mgr.is_alive()
+        # After release, switching works again.
+        mgr.switch(profile_factory("fake_b"))
+        assert mgr.active_backend_id == "fake_b"
+    finally:
+        mgr.stop()
+
+
+def test_stop_wait_then_succeeds(tmp_path, profile_factory):
+    mgr = BackendManager(logs_dir=tmp_path)
+    holder: dict = {}
+    profile = profile_factory(
+        "fake_a", env={"FAKE_SLOW_MS": "400", "FAKE_SLOW_ON": "generate"})
+    try:
+        mgr.ensure(profile)
+        t = _generate_on_thread(mgr, profile, tmp_path / "g.wav", holder)
+        mgr.stop(wait_seconds=10)  # blocks until generation releases
+        t.join(timeout=30)
+        assert not mgr.is_alive()
     finally:
         mgr.stop()
 

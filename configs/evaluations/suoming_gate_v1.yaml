@@ -4,6 +4,8 @@ output_dir: outputs/gates/suoming_v1
 seed: 42
 
 # Round 1: reconstruction -> zero-shot. No postprocessing, no training.
+# codec_roundtrip rebuilds the anchor's ground-truth utterance
+# (validation「午后凉风拂过…」), zero_shot clones from reference.audio.
 cases:
   - backend: dots_legacy
     kind: codec_roundtrip

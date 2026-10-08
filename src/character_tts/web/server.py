@@ -17,7 +17,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from ..backends.manager import BackendManager
+from ..backends.manager import BackendBusyError, BackendManager
 from ..registry.loader import (
     list_backends,
     list_characters,
@@ -74,7 +74,7 @@ _PAGE = """<!DOCTYPE html>
   <select id="character"></select>
   <label>后端</label>
   <select id="backend"></select>
-  <button class="ghost" onclick="switchBackend()">切换后端</button>
+  <button class="ghost" id="switchbtn" onclick="switchBackend()">切换后端</button>
  </div>
  <div class="row"><span id="status">loading…</span></div>
 </div>
@@ -125,6 +125,8 @@ async function refresh() {
     cs.onchange = loadRef; loadRef();
   }
   const h = state.health || {};
+  document.getElementById("switchbtn").disabled = !!state.busy;
+  document.getElementById("genbtn").disabled = !!state.busy;
   document.getElementById("status").innerHTML = state.active_backend
     ? `<span class="ok">worker: ${state.active_backend}</span>` +
       ` <span class="pill">${h.backend_version||""}</span>` +
@@ -248,6 +250,8 @@ def create_app(manager: BackendManager | None = None):
             raise HTTPException(400, f"backend {backend_id} disabled")
         try:
             health = manager.switch(profile)
+        except BackendBusyError as exc:
+            raise HTTPException(409, str(exc))
         except Exception as exc:
             raise HTTPException(500, f"switch failed: {exc}")
         return {"active_backend": backend_id, "health": health}
@@ -258,10 +262,13 @@ def create_app(manager: BackendManager | None = None):
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / f"{int(time.time())}_{job_id}.wav"
         try:
-            client = manager.ensure(profile)
+            # Acquire the generate gate BEFORE touching worker lifecycle:
+            # ensure() may switch workers, and while the gate is held all
+            # external switch/stop calls are refused.
             if not manager.acquire_generate():
-                raise RuntimeError("another generation is in progress")
+                raise BackendBusyError("another generation is in progress")
             try:
+                client = manager.ensure(profile)
                 result = client.generate(
                     text=text, output_path=str(out_path),
                     reference_audio=character.reference_audio,
@@ -328,7 +335,12 @@ def create_app(manager: BackendManager | None = None):
 
     @app.on_event("shutdown")
     def _shutdown() -> None:
-        manager.stop()
+        try:
+            manager.stop(wait_seconds=30)
+        except BackendBusyError:
+            logger.warning("shutdown during active generation; forcing "
+                           "worker stop")
+            manager.force_stop()
 
     app.state.manager = manager
     return app

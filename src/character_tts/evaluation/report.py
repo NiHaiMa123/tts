@@ -29,7 +29,10 @@ def write_report_md(output_dir: str | Path, report: dict[str, Any],
     lines.append(f"- generated_at: {report.get('generated_at')}")
     lines.append(f"- seed: {report.get('seed')}")
     ref = report.get("reference") or {}
+    gt = report.get("ground_truth") or {}
     lines.append(f"- reference sha256: `{ref.get('sha256')}`")
+    if gt:
+        lines.append(f"- ground truth sha256: `{gt.get('sha256')}`")
     lines.append(f"- anchor text: {report.get('anchor_text')}")
     lines.append("")
 
@@ -55,8 +58,8 @@ def write_report_md(output_dir: str | Path, report: dict[str, Any],
     lines.append("## Objective metrics")
     lines.append("")
     lines.append(
-        "| Sample | dur (s) | RMS dBFS | LUFS | TP dBTP | E4-8k% | E8-12k% | "
-        "E12-18k% | flatness | crest | entropy | Δ2-9k |"
+        "| Sample | SR | dur (s) | RMS dBFS | LUFS | TP dBTP | E4-8k% | "
+        "E8-12k% | flatness | crest | entropy | Δ2-9k |"
     )
     lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
     for rel, m in metrics.items():
@@ -67,13 +70,21 @@ def write_report_md(output_dir: str | Path, report: dict[str, Any],
             v = m.get(key)
             return f"{v:.{nd}f}" if isinstance(v, (int, float)) else ""
         lines.append(
-            f"| `{rel}` | {f('duration')} | {f('rms_dbfs')} | {f('lufs', 1)} | "
+            f"| `{rel}` | {f('sample_rate', 0)} | {f('duration')} | "
+            f"{f('rms_dbfs')} | {f('lufs', 1)} | "
             f"{f('true_peak_dbtp', 1)} | {f('band_energy_4k_8k', 3)} | "
-            f"{f('band_energy_8k_12k', 3)} | {f('band_energy_12k_18k', 3)} | "
+            f"{f('band_energy_8k_12k', 3)} | "
             f"{f('spectral_flatness', 3)} | {f('spectral_crest', 1)} | "
             f"{f('spectral_entropy', 3)} | {f('temporal_delta_2k_9k', 3)} |"
         )
     lines.append("")
+    lines.append(
+        "> Spectral metrics are computed at a shared analysis rate "
+        "(analysis_sr ≤ 24 kHz) — bands above the common Nyquist are "
+        "excluded because 24 kHz and 48 kHz outputs are not comparable "
+        "there. Per-file native-band energy >12 kHz is in metrics.json "
+        "as descriptive context only."
+    )
     lines.append(
         "> Objective metrics are descriptive only. No single metric decides "
         "quality — see plan section 0.5. Subjective scores remain "

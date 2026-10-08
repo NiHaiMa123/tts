@@ -56,6 +56,37 @@ def verify_reference(character: CharacterProfile) -> dict[str, Any]:
     return result
 
 
+def verify_ground_truth(character: CharacterProfile) -> dict[str, Any] | None:
+    """Check the anchor's real utterance exists and matches its sha256.
+
+    Returns None when the character has no ground truth — codec_roundtrip
+    cases then report ``blocked`` instead of silently reusing the clone
+    prompt as reconstruction input.
+    """
+    gt = character.ground_truth
+    if gt is None:
+        return None
+    audio = gt.get("audio")
+    if not audio or not Path(audio).is_file():
+        raise FileNotFoundError(
+            f"character '{character.character_id}' ground truth audio "
+            f"missing: {audio}"
+        )
+    result: dict[str, Any] = {"audio": audio, "text": gt.get("text"),
+                              "anchor_id": gt.get("anchor_id"),
+                              "source": gt.get("source")}
+    expected = gt.get("sha256")
+    if expected:
+        actual = sha256_file(audio)
+        result["sha256"] = actual
+        if actual.lower() != expected.lower():
+            raise ValueError(
+                f"ground truth sha256 mismatch: expected {expected}, "
+                f"got {actual}"
+            )
+    return result
+
+
 def _anchor_text(character: CharacterProfile) -> str:
     anchors = character.anchor_texts
     if not anchors:
@@ -77,7 +108,8 @@ def _write_sidecar(output_path: Path, payload: dict[str, Any]) -> None:
 
 def run_case(manager: BackendManager, case: GateCase, *,
              character: CharacterProfile, evaluation: EvaluationConfig,
-             reference_wav: Path) -> dict[str, Any]:
+             reference_wav: Path,
+             ground_truth_wav: Path | None = None) -> dict[str, Any]:
     """Run one gate case. Always returns a record dict; never raises."""
     record: dict[str, Any] = {
         "backend": case.backend,
@@ -86,6 +118,12 @@ def run_case(manager: BackendManager, case: GateCase, *,
         "status": "pending",
         "started_at": _utc_now(),
     }
+    if case.kind == "codec_roundtrip" and ground_truth_wav is None:
+        record["status"] = "blocked"
+        record["reason"] = ("character has no ground truth utterance — "
+                            "codec_roundtrip refuses to use the clone prompt")
+        record["finished_at"] = _utc_now()
+        return record
     out_path = safe_output_path(evaluation.output_dir, case.output)
     try:
         profile = load_backend(case.backend)
@@ -93,17 +131,19 @@ def run_case(manager: BackendManager, case: GateCase, *,
             record["status"] = "blocked"
             record["reason"] = "backend disabled in config"
             return record
-        client = manager.ensure(profile)
         if not manager.acquire_generate():
             record["status"] = "error"
             record["error"] = "concurrent generation in progress"
             return record
         try:
+            # ensure() may switch workers — that must happen *inside* the
+            # generate gate so external switch/stop calls stay blocked.
+            client = manager.ensure(profile)
             seed = int(case.options.get("seed", evaluation.seed))
             if case.kind == "codec_roundtrip":
                 t0 = time.monotonic()
                 result = client.codec_roundtrip(
-                    audio_path=str(reference_wav),
+                    audio_path=str(ground_truth_wav),
                     output_path=str(out_path),
                     timeout=600,
                 )
@@ -148,6 +188,9 @@ def run_case(manager: BackendManager, case: GateCase, *,
                 "adapter": (manager.profile.model.get("adapter")
                             if manager.profile else None),
                 "reference_sha256": sha256_file(reference_wav),
+                "ground_truth_sha256": (sha256_file(ground_truth_wav)
+                                      if ground_truth_wav is not None
+                                      else None),
                 "text": _anchor_text(character) if case.kind != "codec_roundtrip"
                         else None,
                 "seed": case.options.get("seed", evaluation.seed),
@@ -195,6 +238,16 @@ def run_gate(evaluation: EvaluationConfig, character: CharacterProfile,
             sha256_file(ref_dest) != ref.get("sha256"):
         shutil.copy2(ref["audio"], ref_dest)
 
+    # Ground truth (the anchor's real utterance) is the codec-roundtrip
+    # input and the A/B original — never the clone prompt.
+    gt = verify_ground_truth(character)
+    gt_dest: Path | None = None
+    if gt is not None:
+        gt_dest = out_dir / "ground_truth_original.wav"
+        if not gt_dest.exists() or \
+                sha256_file(gt_dest) != gt.get("sha256"):
+            shutil.copy2(gt["audio"], gt_dest)
+
     own_manager = manager is None
     manager = manager or BackendManager(logs_dir=out_dir / "logs")
     cases = evaluation.cases
@@ -212,6 +265,7 @@ def run_gate(evaluation: EvaluationConfig, character: CharacterProfile,
                 character=character,
                 evaluation=evaluation,
                 reference_wav=ref_dest,
+                ground_truth_wav=gt_dest,
             )
             records.append(record)
             logger.info("  -> %s (%s)", record["status"],
@@ -261,6 +315,12 @@ def run_gate(evaluation: EvaluationConfig, character: CharacterProfile,
             "sha256": ref.get("sha256"),
             "text": character.reference_text,
         },
+        "ground_truth": ({
+            "audio": gt["audio"],
+            "sha256": gt.get("sha256"),
+            "text": gt.get("text"),
+            "anchor_id": gt.get("anchor_id"),
+        } if gt else None),
         "backend_health": merged_health,
         "cases": [r if not isinstance(r, GateCase) else asdict(r)
                   for r in merged_cases],

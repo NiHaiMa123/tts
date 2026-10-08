@@ -143,9 +143,24 @@ def _fmt_params(sidecar: dict[str, Any] | None) -> str:
     return html.escape(", ".join(dict.fromkeys(parts)))
 
 
+def _top_level_role(name: str) -> tuple[str, str]:
+    """(backend, kind) labels for wavs living at the output root."""
+    if "ground_truth" in name:
+        return "ground_truth", "原声(validation)"
+    return "reference", "克隆参考音频"
+
+
 def build_samples(output_dir: Path) -> dict[str, Any]:
     items = []
-    for wav in sorted(Path(output_dir).rglob("*.wav")):
+    wavs = sorted(
+        Path(output_dir).rglob("*.wav"),
+        # Originals first, then per-backend dirs — the listening flow
+        # starts from the real utterances. Depth is judged on the path
+        # *relative* to output_dir (p.parts counts absolute ancestors).
+        key=lambda p: (len(p.relative_to(output_dir).parts) > 1,
+                       p.as_posix()),
+    )
+    for wav in wavs:
         rel = wav.relative_to(output_dir)
         sidecar_path = wav.with_suffix(wav.suffix + ".json")
         sidecar = None
@@ -155,8 +170,10 @@ def build_samples(output_dir: Path) -> dict[str, Any]:
                     sidecar_path.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 sidecar = None
-        backend = rel.parts[0] if len(rel.parts) > 1 else "reference"
-        kind = "reference" if rel.parent == Path(".") else rel.stem
+        if len(rel.parts) > 1:
+            backend, kind = rel.parts[0], rel.stem
+        else:
+            backend, kind = _top_level_role(rel.stem)
         try:
             import soundfile as sf
             info = sf.info(str(wav))

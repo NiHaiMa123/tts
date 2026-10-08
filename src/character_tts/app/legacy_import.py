@@ -60,6 +60,48 @@ def _cfg_path(root: Path, path: Path) -> str:
         return str(path)
 
 
+def _find_anchor_utterance(root: Path, ds_root: Path, text: str,
+                           problems: list[str]) -> dict[str, Any] | None:
+    """Locate the dataset record matching ``text``; verify audio + sha256.
+
+    Searches validation -> test -> train manifests and returns the
+    ``{audio, sha256, source}`` block for the anchor_texts entry, or None
+    (recording the reason in ``problems``).
+    """
+    target = text.strip()
+    for split in ("validation", "test", "train"):
+        manifest = ds_root / f"{split}.jsonl"
+        if not manifest.is_file():
+            continue
+        for line in manifest.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if str(rec.get("text") or "").strip() != target:
+                continue
+            raw = str(rec.get("audio") or "")
+            audio = Path(raw)
+            if not audio.is_absolute():
+                audio = ds_root / audio
+            if not audio.is_file():
+                problems.append(
+                    f"anchor utterance missing on disk: {audio}")
+                return None
+            return {
+                "audio": _cfg_path(root, audio),
+                "sha256": sha256_file(audio),
+                "source": _cfg_path(root, manifest),
+            }
+    problems.append(
+        f"no dataset record matches anchor text in {ds_root} "
+        "(searched validation/test/train)")
+    return None
+
+
 def import_suoming(root: Path, profile_rel: str = PROFILE_REL,
                    dataset_rel: str = DATASET_REL) -> dict[str, Any]:
     """Verify legacy assets and build the character config dict."""
@@ -113,17 +155,14 @@ def import_suoming(root: Path, profile_rel: str = PROFILE_REL,
     else:
         problems.append(f"adapter dir missing: {adapter_dir}")
 
-    validation_anchor = None
-    val_manifest = ds_root / "validation.jsonl"
-    if val_manifest.is_file():
-        first = val_manifest.read_text(encoding="utf-8").splitlines()
-        if first:
-            try:
-                rec = json.loads(first[0])
-                validation_anchor = {"audio": rec.get("audio"),
-                                     "text": rec.get("text")}
-            except json.JSONDecodeError:
-                pass
+    # Ground truth: the dataset record whose text matches the gate anchor
+    # text exactly. First-line selection was wrong — the anchor utterance
+    # is a specific validation item (matches dotstts' grit diagnostic ref).
+    ground_truth = _find_anchor_utterance(root, ds_root, GATE_ANCHOR_TEXT,
+                                        problems)
+    anchor = {"id": "rain", "text": GATE_ANCHOR_TEXT}
+    if ground_truth:
+        anchor.update(ground_truth)
 
     if problems:
         return {"status": "blocked", "problems": problems}
@@ -136,7 +175,6 @@ def import_suoming(root: Path, profile_rel: str = PROFILE_REL,
             "display_name": "锁暝",
             "dataset": dataset,
             "reference": reference,
-            "validation_anchor": validation_anchor,
             "legacy_voice_profile": {
                 "path": _cfg_path(root, profile_path),
                 "model_id": profile.get("model_id"),
@@ -153,7 +191,7 @@ def import_suoming(root: Path, profile_rel: str = PROFILE_REL,
                 "runtime": profile.get("runtime") or {},
             },
             "evaluation": {
-                "anchor_texts": [{"id": "rain", "text": GATE_ANCHOR_TEXT}],
+                "anchor_texts": [anchor],
             },
             "provenance": {
                 "imported_from": str(root),

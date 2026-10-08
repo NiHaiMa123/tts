@@ -18,9 +18,11 @@ Install-Packages -PythonExe $py -Packages @(
 
 if (-not $SkipDownload) {
     $cacheDir = Join-Path $Script:RepoRoot "hf_cache\voxcpm2"
-    $ok = Invoke-HfDownload -RepoId "openbmb/VoxCPM2" -PythonExe $py `
-        -CacheDir $cacheDir
-    if (-not $ok) {
+    # Revision pinned to match configs/backends/voxcpm2.yaml.
+    $info = Invoke-HfDownload -RepoId "openbmb/VoxCPM2" -PythonExe $py `
+        -CacheDir $cacheDir `
+        -Revision "32279effe8c19989596f05d353d1447f51d9e915"
+    if (-not $info) {
         Write-DownloadRecord -Asset "openbmb/VoxCPM2" -SourceType "failed" `
             -ResolvedRevision "" -LocalPath $cacheDir -Success $false
         throw "model download failed on all sources (see logs/downloads.jsonl)"
