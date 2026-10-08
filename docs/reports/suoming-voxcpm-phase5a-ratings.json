@@ -1,0 +1,251 @@
+{
+  "schema": "suoming_voxcpm_phase5a_ratings/1",
+  "experiment_id": "suoming_voxcpm_phase5a",
+  "source": "outputs/gates/suoming_voxcpm_phase5a/listen/listen-ratings-phase5a.json",
+  "source_type": "raw_export",
+  "exported_at": "2026-10-08T12:02:32.451Z",
+  "scale": {
+    "range": "1-5",
+    "direction": "higher_is_better",
+    "grit_semantics": "higher means LESS grit/scratchiness"
+  },
+  "dimensions": [
+    "clarity",
+    "grit",
+    "likeness",
+    "naturalness"
+  ],
+  "extra_fields": [
+    "text_complete",
+    "artifact_type",
+    "notes"
+  ],
+  "samples": [
+    {
+      "case_id": "prompt_ab/P0_mid_exposition_seed42",
+      "group": "prompt_ab",
+      "output_sha256": "15228e11a51b4b6b4109cbad098ed6ca6e484705eac7050d7fe54045918a3211",
+      "sha_status": "verified",
+      "clarity": "5",
+      "grit": "5",
+      "likeness": "5",
+      "naturalness": "4",
+      "artifact_type": "速度偏快"
+    },
+    {
+      "case_id": "prompt_ab/P0_rain_seed42",
+      "group": "prompt_ab",
+      "output_sha256": "3f722e6e6fdb495d9c38ca2a76dc5651f5121f5a0ec4b8c25a4ea2320f9b5347",
+      "sha_status": "verified",
+      "clarity": "5",
+      "grit": "5",
+      "likeness": "4",
+      "naturalness": "3",
+      "artifact_type": "速度偏快"
+    },
+    {
+      "case_id": "prompt_ab/P1_rain_seed42",
+      "group": "prompt_ab",
+      "output_sha256": "72c04f53d98b79fa4d9a96f3ed2f9d214d635427ffe2d874f92e1b6eb13120d2",
+      "sha_status": "verified",
+      "clarity": "3",
+      "grit": "5",
+      "likeness": "4",
+      "naturalness": "2",
+      "artifact_type": "偏慢"
+    },
+    {
+      "case_id": "prompt_ab/P2_rain_seed42",
+      "group": "prompt_ab",
+      "output_sha256": "2791514e7d866af51fa7ae6dcf1ab9f53d45e55717774047c4707c25032f7e29",
+      "sha_status": "verified",
+      "clarity": "5",
+      "grit": "5",
+      "likeness": "5",
+      "naturalness": "5"
+    },
+    {
+      "case_id": "prompt_ab/P2_mid_exposition_seed42",
+      "group": "prompt_ab",
+      "output_sha256": "0d0214069e10800eba5c9d88cc62f68b4848b6890898614cc518f8d88c20b026",
+      "sha_status": "verified",
+      "clarity": "5",
+      "grit": "5",
+      "likeness": "5",
+      "naturalness": "5"
+    },
+    {
+      "case_id": "prompt_ab/P1_mid_exposition_seed42",
+      "group": "prompt_ab",
+      "output_sha256": "9d173e1dbea850518b8bea447310a1eb1f6fc126952d064a12aecf182c0f98e2",
+      "sha_status": "verified",
+      "clarity": "4",
+      "grit": "5",
+      "likeness": "5",
+      "naturalness": "2",
+      "artifact_type": "有种回声偏大的感觉，就是口型很大"
+    },
+    {
+      "case_id": "codec/anchor_gt:roundtrip48",
+      "group": "codec_diagnostics",
+      "output_sha256": "c8919cb0839b25052ea7da6dc7c51ebdcbb573510b849b6a429d4f7eed0a9178",
+      "sha_status": "verified",
+      "clarity": "1",
+      "grit": "1",
+      "likeness": "4",
+      "naturalness": "5"
+    },
+    {
+      "case_id": "codec/anchor_gt:roundtrip_cond16k",
+      "group": "codec_diagnostics",
+      "output_sha256": "baab858616378535975a4afb945ccad8b98119263fa879d4aa10590db41d296b",
+      "sha_status": "verified",
+      "clarity": "1",
+      "grit": "1",
+      "likeness": "3",
+      "naturalness": "5"
+    },
+    {
+      "case_id": "codec/independent_clean:roundtrip48",
+      "group": "codec_diagnostics",
+      "output_sha256": "b237a333a90aa73813bedff0acaad7381d0b00f808ab0d7e1ce3ef0298a14eff",
+      "sha_status": "verified",
+      "clarity": "1",
+      "grit": "1",
+      "likeness": "5",
+      "naturalness": "5"
+    },
+    {
+      "case_id": "codec/independent_clean:roundtrip_cond16k",
+      "group": "codec_diagnostics",
+      "output_sha256": "b0ff89fd5de424401c9303771d3f5f22018e650bb03b5c9b829453f74fabd86f",
+      "sha_status": "verified",
+      "clarity": "1",
+      "grit": "1",
+      "likeness": "4",
+      "naturalness": "5"
+    },
+    {
+      "case_id": "stability/pause_emotion_seed44",
+      "group": "stability",
+      "output_sha256": "22b028eff7acc88eefaf892832bfbca12604631419de03b5af9646efaf349ec5",
+      "sha_status": "verified",
+      "clarity": "5",
+      "grit": "5",
+      "likeness": "4",
+      "naturalness": "4",
+      "artifact_type": "有种回声偏大的感觉，就是口型很大"
+    },
+    {
+      "case_id": "stability/pause_emotion_seed43",
+      "group": "stability",
+      "output_sha256": "b43f270aa146b9928bc1c05f86ae5d269f8abc9bd1c741bb8e8b4105ea99c279",
+      "sha_status": "verified",
+      "clarity": "4",
+      "grit": "5",
+      "likeness": "5",
+      "naturalness": "4",
+      "artifact_type": "偏快，有种回声偏大的感觉，就是口型很大"
+    },
+    {
+      "case_id": "stability/pause_emotion_seed42",
+      "group": "stability",
+      "output_sha256": "d06dae07ec755538e2e8d45a8b9b3bc1fd60c474f5b9580263fe893220bc0bfd",
+      "sha_status": "verified",
+      "clarity": "5",
+      "grit": "5",
+      "likeness": "5",
+      "naturalness": "4"
+    },
+    {
+      "case_id": "stability/mid_exposition_seed44",
+      "group": "stability",
+      "output_sha256": "254fed39d6b852459599d0391d5da27b1bb35d0130b9543dff965756b321dcff",
+      "sha_status": "verified",
+      "clarity": "5",
+      "grit": "5",
+      "likeness": "4",
+      "naturalness": "1"
+    },
+    {
+      "case_id": "stability/short_response_seed44",
+      "group": "stability",
+      "output_sha256": "321fcba2250456f85a54341b55bdab8a7ea7c013ce130932df5493dcb7957865",
+      "sha_status": "verified",
+      "clarity": "4",
+      "grit": "4",
+      "likeness": "2",
+      "naturalness": "1"
+    },
+    {
+      "case_id": "stability/short_response_seed43",
+      "group": "stability",
+      "output_sha256": "e05fd651e22ea00f7ac09d345953c8e9d038280351b9295af8d75ba35f113886",
+      "sha_status": "verified",
+      "clarity": "5",
+      "grit": "5",
+      "likeness": "3",
+      "naturalness": "3"
+    },
+    {
+      "case_id": "stability/short_response_seed42",
+      "group": "stability",
+      "output_sha256": "652929db019680dbbee205ca56422a408b3d6523d17e1a204ec5f6521932b323",
+      "sha_status": "verified",
+      "clarity": "1",
+      "grit": "1",
+      "likeness": "3",
+      "naturalness": "5"
+    },
+    {
+      "case_id": "stability/mid_exposition_seed42",
+      "group": "stability",
+      "output_sha256": "15228e11a51b4b6b4109cbad098ed6ca6e484705eac7050d7fe54045918a3211",
+      "sha_status": "verified",
+      "clarity": "5",
+      "grit": "5",
+      "likeness": "5",
+      "naturalness": "5"
+    },
+    {
+      "case_id": "stability/mid_exposition_seed43",
+      "group": "stability",
+      "output_sha256": "cada0dc700771a05b9919a7339c74cc33bf7e7f91f06f123690ae354bfe534bc",
+      "sha_status": "verified",
+      "clarity": "5",
+      "grit": "5",
+      "likeness": "5",
+      "naturalness": "5"
+    },
+    {
+      "case_id": "stability/rain_seed44",
+      "group": "stability",
+      "output_sha256": "e8a8b081a063a8f6f5be74a4fb3f08b6ad0357438e23b822a6ed4b8c96dbee98",
+      "sha_status": "verified",
+      "clarity": "4",
+      "grit": "5",
+      "likeness": "4",
+      "naturalness": "5"
+    },
+    {
+      "case_id": "stability/rain_seed43",
+      "group": "stability",
+      "output_sha256": "f0598976990e2a99cc3f378ef6b6134f4cb274706dbe92db6cbf1576d09b69b9",
+      "sha_status": "verified",
+      "clarity": "4",
+      "grit": "5",
+      "likeness": "4",
+      "naturalness": "5"
+    },
+    {
+      "case_id": "stability/rain_seed42",
+      "group": "stability",
+      "output_sha256": "3f722e6e6fdb495d9c38ca2a76dc5651f5121f5a0ec4b8c25a4ea2320f9b5347",
+      "sha_status": "verified",
+      "clarity": "4",
+      "grit": "5",
+      "likeness": "4",
+      "naturalness": "5"
+    }
+  ]
+}
