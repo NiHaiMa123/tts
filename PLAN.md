@@ -8,15 +8,14 @@
 
 ---
 
-## 当前执行状态与优先任务（2026-10-08，Phase 5A2）
+## 当前执行状态与优先任务（2026-10-08，Phase 5B Pilot）
 
-- **Phase 0–4：已由 Devin 实施并提交**，以 `docs/reports/suoming-backend-gate-v1.md` 和当前 `main` 为基线；不要重新搭平台、不要重新安装所有模型、不要重跑与本轮无关的全量 Gate。
-- 已有用户盲听评分已回填报告。VoxCPM2 **zero-shot 清澈度/磨砂改善/角色相似度/自然度 = 5/5/5/3**；但 VoxCPM2 **Codec roundtrip = 1/1/4/5**。此冲突需要诊断，不能以 zero-shot 一条高分直接宣布训练准入。
-- **Phase 5A 已完成且用户已评分**：以 commit `d4c76d6`、`docs/reports/suoming-voxcpm-phase5a.md`、`docs/reports/suoming-voxcpm-phase5a-ratings.json` 为不可覆写基线。Codec 重建低分已有证据支持 AudioVAE 重建局限；无需重跑 Codec。
-- **本轮唯一执行目标：Phase 5A2 — P2 短句稳定性与重复评分一致性复核**，详见第 24 节。最多补 10 条新的 VoxCPM2 zero-shot WAV，使用已有环境与权重，仍不开展 LoRA/SFT。
-- Dots 和 Qwen3-TTS 继续作为既有 baseline；不得因此删除后端、改动旧 `dotstts` 仓库或重构通用架构。
-- 有效命令：Devin 拉取 `main` 后**只执行第 24 节 Phase 5A2**；不要重复 Phase 5A 或 Phase 0–4。提交新实验代码、报告、试听页与 SHA256 清单，**停在用户训练决策门前**。
-
+- **Phase 0–4、5A、5A2 已完成且已有人耳评分**。最新 Phase 5A2 评分提交：`a3f8e57`；历史结果不得覆盖，详见 `docs/reports/suoming-voxcpm-phase5a2.md`、`docs/reports/suoming-voxcpm-phase5a2-ratings.json`。
+- 用户说明**多次连续听非常相似的 TTS 音频后会感觉难以听出区别**。同 SHA 同音频跨场次分数剧变主要反映听觉适应/疲劳、试听上下文和评分尺度漂移，**不是音频重新合成出了不同缺陷**。既有分数保留作为原始观察，后续不得将其机械计算成真实坏句率或据此认定 P2 稳定失败。
+- **当前唯一执行目标：第 25 节 Phase 5B —— VoxCPM2 单次、受控、低预算 LoRA pilot + 少量高可信 A/B 评测**。不再做 Phase 5A3/连续刷 Prompt/种子，优先自动筛查与首次印象，降低人的试听负担。
+- P0（谛天鉴）仍是生产参考基线；P2（回到华亭）只作候选。Codec 重建失真已确认且记录为**试训风险**：这次试训用于验证 TTS 生成改善潜力，不代表接受 Codec 失真作为最终质量。
+- 保留三个独立 backend 和当前 WebUI，**不重构基础平台、不修改旧 dotstts、不训练 Dots/Qwen、不更新生产默认 LoRA/Prompt**。
+- Devin 拉取 `main` 后**只执行第 25 节**；最多 150 个优化器步骤与 3 个训练检查点，生成有界试听证据后停止，等待用户最终审核。若不具备可靠数据/显存/官方 API 条件，标明 BLOCKED，不勉强训练。
 ---
 
 ## 0. 核心原则
@@ -91,7 +90,7 @@ zero-shot
 才允许 LoRA / SFT
 ```
 
-如果一个后端仅做原声 codec roundtrip 就明显出现不可接受的磨砂、金属感、失真或细节损失，直接淘汰，不投入训练时间。
+如果 codec roundtrip 明显失真，默认停止训练投入；但**codec roundtrip 质量与生成质量不等价**。对 VoxCPM2，Phase 5A 已通过原声重建/zero-shot 分离分析确认这两条路径的差异，本项目允许仅做第 25 节明示的**受控 LoRA 小试验**，风险写入报告，绝不视为 codec 问题已解决或已批准生产。
 
 ### 0.5 不以单个指标代替人耳
 
@@ -691,11 +690,11 @@ outputs/gates/suoming_v1/listen/index.html
 
 ## Gate C — training eligibility
 
-只有：
+一般情况下必须：
 
 `codec_gate != fail`
 
-且 zero-shot 不存在结构性质量问题，才进入：
+且 zero-shot 不存在结构性质量问题，才进入；**VoxCPM2 属于经用户要求规划的小规模研究性例外**，需完整保留 codec 重建失真风险、对照和停止条件（第 25 节）：
 
 - LoRA
 - SFT
@@ -860,9 +859,9 @@ python -m pytest
 
 **Phase 5A（已完成）**：VoxCPM2 多 seed、Codec 归因、P0/P1/P2 对照及人工评分已完成；以 `d4c76d6` 报告为历史基线，不能重新跑后覆盖。
 
-**Phase 5A2（当前允许执行）**：仅完成 P2 与 P0 的双短句、多 seed 比较，以及中长句 seed44 的 P2 对照和评分一致性诊断；详见第 24 节。
+**Phase 5A2（已完成）**：P0/P2 双短句多 seed 与评分一致性复核已完成；同音频跨场次评分变化很大且用户报告听觉适应，因此不得将旧单项评分作为硬性失败率；详见第 24 节与评分文件。
 
-**Phase 5B（当前禁止执行）**：训练方案设计/小规模 LoRA/SFT 或 checkpoint 对比。必须在 Phase 5A 报告交付、用户确认后另行授权。当前即使存在 5/5/5/3 的 zero-shot 高分，也不构成训练许可。
+**Phase 5B（当前 ACTIVE）**：仅执行第 25 节明示的**一次受控 LoRA pilot**。允许训练的只有 VoxCPM2 LoRA，最多 150 optimizer steps、3 个保存点；是否继续更多步数、提升为生产版本、扩大数据/模型须由用户再次明确授权。
 
 Qwen3-TTS 和 Dots 保留现状作为对照，不自动启动额外训练。
 
@@ -953,7 +952,7 @@ Backend 真实模型 smoke 可标记 integration，不要求普通 unit test 每
 
 ---
 
-# 20. 本轮禁止事项
+# 20. Phase 0–4 历史禁止事项（当前以第 25 节为准）
 
 - 不训练 VoxCPM2；
 - 不训练 Qwen3-TTS；
@@ -967,7 +966,7 @@ Backend 真实模型 smoke 可标记 integration，不要求普通 unit test 每
 
 ---
 
-# 21. 本轮最终交付
+# 21. Phase 0–4 历史交付（当前以第 25 节为准）
 
 Devin 完成本计划 Phase 0–4 后，至少提交：
 
@@ -1006,7 +1005,7 @@ Devin 完成本计划 Phase 0–4 后，至少提交：
 
 ---
 
-# 22. Devin 执行规则
+# 22. 历史 Devin 执行规则（当前以第 25 节为准）
 
 开始时：
 
@@ -1014,7 +1013,7 @@ Devin 完成本计划 Phase 0–4 后，至少提交：
 2. 阅读完整 `PLAN.md`；
 3. 检查本机旧 `dotstts` 路径和已有模型/cache；
 4. 优先复用本地 cache，避免重复下载；
-5. Phase 0–4、5A 已完成，本轮**只执行第 24 节 Phase 5A2**；不得重复历史实验或覆盖旧评价；
+5. Phase 0–5A2 已完成，本轮**只执行第 25 节 Phase 5B Pilot**；不得重复历史实验或覆盖旧评价；
 6. 每个 Phase 完成后先测试再继续；
 7. 发现模型/API 与计划假设不一致时，以官方实际接口为准，但保持架构边界；
 8. 不因单一 backend 阻塞整个任务：记录 BLOCKED 后继续其他 backend；
@@ -1027,12 +1026,12 @@ Devin 完成本计划 Phase 0–4 后，至少提交：
    - BLOCKED 项
    - 推荐下一步
 
-**当前轮次仅限 Phase 5A2；不得开始任何 LoRA/SFT 训练。**
+**本轮仅按第 25 节允许一次受限 VoxCPM2 LoRA pilot；其余模型训练仍禁止。**
 
 
 ---
 
-# 23. Phase 5A — 锁暝 VoxCPM2 稳定性与 Codec 异常专项（当前执行）
+# 23. Phase 5A — 锁暝 VoxCPM2 稳定性与 Codec 异常专项（历史已完成）
 
 ## 23.1 基线与问题定义
 
@@ -1230,9 +1229,9 @@ Devin 完成本计划 Phase 0–4 后，至少提交：
 
 ---
 
-# 24. Phase 5A2 — VoxCPM2 P2 短句稳定性及评分一致性复核（当前唯一执行任务）
+# 24. Phase 5A2 — VoxCPM2 P2 短句稳定性及评分一致性复核（历史已完成）
 
-> 状态：**ACTIVE**（2026-10-08）。Phase 5A 的报告/评分/音频及其 hash 是冻结基线，不再重复第 23 节。目的是用最小样本回答“P2 的两条全 5 分能否推广至短句和不利 seed”，而不是刷 Prompt、堆后处理或直接开训。
+> 状态：**COMPLETED**（2026-10-08；以 `a3f8e57` 的报告/评分为准）。以下为历史实验计划，已不再授权重复跑实验或限制当前第 25 节的 LoRA pilot。
 
 ## 24.1 冻结证据与未解问题
 
@@ -1339,3 +1338,204 @@ Devin 完成本计划 Phase 0–4 后，至少提交：
 本轮不可：训练 VoxCPM2 / Qwen / Dots、新增后端、优化 Codec、无限扫 seed、重做 Phase 0–5A、套用 EQ 修好听感、修改生产默认 Prompt。
 
 下载规则不变：**本地 cache → 镜像优先 → 镜像失败再走 `127.0.0.1:7897`**。不得修改全局代理。
+
+
+---
+
+# 25. Phase 5B — VoxCPM2 LoRA 小规模可行性试验与低疲劳盲听（ACTIVE）
+
+> **唯一当前任务。** 这是研发 pilot 而不是产品质量验收；允许 Devin **在本地执行一次受限 LoRA 训练**，但不授权长期训练、不允许自动扩大训练步数或更改正式生产模型。用户已报告连续听相似音频会逐渐“听不出了”，因此试听设计必须降低听觉适应/疲劳造成的偏差。
+
+## 25.1 决策依据与目标
+
+历史证据：
+- VoxCPM2 zero-shot 已能生成很清澈且接近锁暝的声线；局部存在语速、空腔/口型和短句韵律异常。
+- P2 在 Phase 5A 个别句子明显优于 P0，但 Phase 5A2 配对结果方向不稳定；**不要把之前 P2 2/2 全 5 分当成普适优势**，也不应把同一 WAV 跨场次分数变化当成模型随机生成失败。
+- 同一 SHA WAV 在不同试听情景中四维评分有明显变化；用户明确反映连听类似语音后听觉分辨力下降。
+- VoxCPM2 AudioVAE 真实音频 16kHz 编码、48kHz 解码的 roundtrip 已存在主观可闻失真，LoRA **不能保证修复 codec**；TTS 生成 latent 路径与原声 encoder roundtrip 路径不同，值得做成本受限的生成质量试验。
+
+核心研究问题只限：
+1. **与完全相同的 zero-shot baseline 相比**，LoRA 能否在锁暝音色、自然度、稳定性、短句表现上带来**可闻且可复现**的改善？
+2. LoRA 是否引入更强的磨砂、金属感、错误发音、音色漂移或过拟合？
+3. 是否存在早期 checkpoint 已够好 / 继续训练反而变差的趋势，值得用户选择下一步？
+
+**成功标准不是训练 loss 下降，也不是人耳一次打 5 分，而是可复现、可试听、可追踪的对照证据。**
+
+## 25.2 官方训练接口与机器约束（先做 preflight）
+
+优先调用 VoxCPM2 官方入口，而非发明自己的训练循环：
+
+- 上游仓库：OpenBMB/VoxCPM；
+- 官方脚本：scripts/train_voxcpm_finetune.py；
+- 官方 v2 LoRA 模板：conf/voxcpm_v2/voxcpm_finetune_lora.yaml；
+- 官方数据格式：JSONL，每条至少 {"audio":"...","text":"..."}，可带 duration / dataset_id；
+- LoRA 能分别启用 lm、dit；不要擅自假定仅训练 LM 就等价于完整声学适配；
+- 官方训练期编码 sample_rate 为 **16000**，输出监听是 **48000**，不要把 48k 训练音频直接错误当成 16k；
+- 所有接口细节以**当前本地安装 voxcpm 2.0.3 对应的官方源码**为准，记录源码 commit、包版本及差异。如依赖不兼容，先修兼容/停下记录，不把绕路自研训练当完成。
+
+目标设备 Windows / RTX 5080 16 GB。先做低成本训练 smoke 和一次完整的前向/反向/optimizer-step 测试，记录真实 peak_allocated/peak_reserved VRAM、精度、吞吐、是否用了官方 GradScaler/offload/checkpoint。**16 GB 能否训练成功必须以机器实测为准**，不能仅凭推理显存数推断。
+
+只允许 VoxCPM2 当前固定 base revision：
+32279effe8c19989596f05d353d1447f51d9e915。
+
+先复用已有模型、源码、环境、数据。如果缺失：**本地缓存 → 镜像 → 镜像失败后 http://127.0.0.1:7897 代理**，仅影响子进程、不修改全局代理、不下载无关模型。禁止升级已验证的推理环境造成三个后端崩溃；优先训练独立环境，不能运行就如实 BLOCKED。
+
+## 25.3 数据冻结、泄漏与质量门
+
+1. **只使用旧 dotstts 锁暝数据集的 train split** 构建本次 VoxCPM2 训练 JSONL。validation/test split 不得进入训练。保留原始 train/val/test manifests，不重新分配以求“更好成绩”。
+2. 严格按 sha256 + 文件路径/文本索引建立训练清单；校验 WAV 存在、长度、采样率、有效语音、空白/重复文本、重复音频、错 speaker、明显噪声和文字对齐。不能为了让程序跑通静默丢弃困难样本。滤掉样本必须有 reject_manifest 与原因计数。
+3. 与冻结评测样本、当前 clone Prompt P0、候选 P2 的音频 SHA 作精确去重；优先对同源切段/重复台词做文本和音频相似度复核，避免同段泄漏。至少雨景、两句短句、中长句和情绪句不进入训练。
+4. 验证文字规范、编码、绝对/相对路径和音频读取方式，与官方 JSONL loader 对齐；实际重采样在 official pipeline 内可追踪，避免重复失真。
+5. 训练样本时长分布、总有效时长、拒绝率、说话人身份与原有质量标记一并入报告。若质量问题严重或剩余数据极少，**STOP: DATA_BLOCKED**，而不是启动高风险训练。
+6. 固定 prompt **P0** 为训练前后对照的参考音频；P2 不进入训练、也不偷换成 baseline。P2 若作为额外推理诊断，只能单独标记为另一个条件。
+
+训练源数据不复制进 Git。写入训练 manifest 应保留文件 hash 和来源索引，不泄露私有绝对路径到公开报告。
+
+## 25.4 本次训练预算、默认超参和失败停止
+
+**只允许 1 次 LoRA pilot**，不得自动搜索 rank、学习率、LoRA target、训练轮数，不全参 SFT，不在第一个结果不好时立即再训一轮。
+
+建议配置基于官方 v2 LoRA 模板的保守起始值（经 preflight 可为显存单次调整，但必须记录变更和理由）：
+
+| 字段 | Pilot 设置 |
+|---|---|
+| pretrained_path | 已固定的本地 VoxCPM2 base 快照 |
+| train_manifest | 25.3 冻结的 train.jsonl |
+| val_manifest | 独立 validation manifest，仅供记录/计算，不得训练 |
+| sample_rate / out_sample_rate | 16000 / 48000（遵循官方） |
+| LoRA modules | lm=true, dit=true, proj=false |
+| LoRA r / alpha / dropout | 16 / 16 / 0.0（试验值，不宣称最优） |
+| micro batch / grad accum | 1 / 8（如显存不够，优先参照官方支持的减载方式） |
+| learning_rate | 1e-4 作为待验证起点，发生训练数值异常即停止，不得靠反复试错无限调参 |
+| max optimizer steps | **150**（硬上限，包括恢复训练的累计步数） |
+| save interval | 50 optimizer steps，最多 step50、step100、step150 三个候选 |
+| validation/logging | 有独立验证数据时每 50 step 记指标；不能用 loss 自动评定最终音质 |
+| GPU | RTX 5080 16GB 单卡；不得假定支持所有 CUDA/Triton 扩展 |
+
+具体配置须先与上游 parser 核实：max_steps/num_iters/save_interval/valid_interval/warmup_steps/max_batch_tokens 等字段含义、真正计算的是 optimizer step 还是 microstep。允许做训练前 **1–2 步 smoke** 并保留日志，正式训练步数计入 150 步总预算；绝对不得以“迭代数”偷换真实 optimizer step。
+
+**一次 OOM 回退**：仅允许记录原配置后，按官方支持的 batch/sequence/filter/caching 策略做一次有证据的减载；不能静默删长句或改目标采样率。仍 OOM 就记 **BLOCKED_16GB**，不继续盲试、不默认开 CPU 超长训练。
+
+出现下述情况立即停止，保存失败证据，不把失败显示成通过：
+- NaN/Inf、梯度/权重异常、持续 loss 爆炸；
+- 模型/revision、数据 sha、speaker 识别不符；
+- 训练结果写入生产路径、意外覆盖旧权重或训练集；
+- 超过 GPU 资源限制、步数预算、第二次 OOM 或多次不可复现崩溃。
+
+每次 checkpoint 需保存：optimizer step、model/adapter hash、official source revision、training args、有效数据 hash、loss/val loss、time、VRAM、resume 信息。不存在则标缺失；不得编造。
+
+## 25.5 训练后推理：Zero-shot vs LoRA 必须公平
+
+LoRA 训练并不意味着“自然度一定上升”。在不动生产后端的条件下，新增**独立评测 profile / 可选 adapter 路径**，加载 step50、100、150，固定 base / reference / generation args / seed、raw waveform、normalize 等。
+
+**固定评测集合（4 条文本，6 个 case/候选）：**
+
+| 文本 | Seed | 理由 |
+|---|---|---|
+| rain（雨景） | 42 | 原声独立 held-out，检验声音纹理 |
+| short_response（开伞） | 42、43 | 历史短句问题 |
+| short_response_2（有什么在跟着我们） | 42、43 | 独立第二短句 |
+| mid_exposition（中长解释） | 42 | 长句连续韵律 |
+
+将 pause_emotion 作为**预留补充样本**，本轮默认不自动扩展；若四句不含明显自然度挑战，报告说明不足即可。
+
+- base zero-shot **6 个 case**：历史 WAV 只有在每项 model revision / reference SHA / text / seed / effective args 全部匹配且磁盘 SHA 校验通过时才能复用，否则新生成并记录；
+- step50/100/150：每个 checkpoint **6 个 case**，共最多 **18** 条新增 LoRA 音频；
+- 本轮评测最多 **24 条新生成 WAV**（6 base + 18 LoRA；不含官方 smoke/训练时内部 sample log）；且评估页面不得强迫用户听完 24 条；
+- 不允许把训练期间的“teacher-forced reconstruction”拿来和 zero-shot 自由生成混作同一结果；必须通过正式推理路径加载 adapter 后合成；
+- 推理参数与 zero-shot 基线一致，仅 adapter/checkpoint 是变量。P0 始终是固定 clone reference。
+- 对于每个 WAV：写 sidecar（checkpoint、LoRA target、data hash、prompt sha、model revision、seed、retry、raw sha、耗时），同时保留训练失败/生成失败样本。
+
+## 25.6 自动质量筛查先行（不要让用户反复听）
+
+自动筛查分层，**只承担“筛选风险/标记可疑片段”，不得直接等同人耳音质评价**。
+
+A. 声学/工程硬错误（可自动判断）：
+- 文件可读、声道采样率、duration 合理性、NaN/Inf、全静音、异常截断、clipping；
+- 每条是否发生内部 retry / badcase，推理参数与参考哈希是否一致；
+- 单声道试听路径、音量/响度差不能成为“听起来更清晰”的混淆项。
+
+B. 文本完整性：
+- 已有 SenseVoice 能复用则跑 ASR + CER/字词差异与对齐定位；
+- 专有名词/同音字（如 心月狐→新月湖）不能仅以 ASR CER 判为 TTS 读错；
+- 标出「漏字、重复、错读、截尾」嫌疑，保存转写原文和时间位置，交用户确认；
+- 不引入新的巨大 ASR 依赖。
+
+C. 主观声音异常辅助定位：
+- 可导出音频波形、spectrogram、明显不连续片段的时间戳；
+- **不要**凭 flatness 单一数字判定磨砂、舌头后缩、口型过大、机械共鸣、失真；不做缺乏标签的“自动模型自评分”冒充真实音质；
+- 若无可靠检测器，标为 **UNDETERMINED**，只提供异常候选供首次听感确认。
+
+将自动检测结果压缩成**可疑片段清单**，而不是让用户连续听几十条完整相似音频。
+
+## 25.7 新试听协议：低疲劳、首次印象、成对决策
+
+原来四维 1–5 分可以保留为可选，但**不能再作为唯一或主决策依据**。
+
+必须提供一个基于现有 listen page 的最小试听流程：
+
+1. **先听用户此前最熟悉的干净参考原声短片段**，然后随机、隐藏模型标签，播放同文本相同 seed 的 A/B（base vs checkpoint）；不同时混入 P0/P2 Prompt 比较；
+2. 每次默认只呈现 **3–5 对**，其他样本折叠，用户可显式进入下一组；不要求同一晚全部听完；
+3. 每对用户先选 **A 更好 / B 更好 / 无明显差异 / 暂无法判断**，再选择最突出的问题标签，如「磨砂/粗糙、前顶/舌位、空腔/口型大、语速/停顿、音色不符、漏字、其他」；
+4. 支持“**第一次听到时立即标记缺陷**”并记录 \`first_impression\`、\`defect_type\`、\`severity\`、\`segment_start/end\`（时间戳选填）；不要强迫回放到听习惯为止；
+5. 若用户表示“听麻木了/分不出来”，允许直接点 \`UNCERTAIN_FATIGUE\` 并停止本轮，**不要把‘无差异’替代疲劳不确定**；
+6. 支持回到干净 reference 再校准、单独复核一次重大缺陷；不强制长时间重播；
+7. 隐藏 checkpoint 身份并在不同轮次平衡 A/B 左右顺序；识别同 SHA 的重复引用，禁止当作两个独立声音结果；
+8. 导出：experiment_id、pair_id、A/B 的真实 sha/checkpoint、盲测顺序、用户选择、first_impression、缺陷标签、optional 分数、是否疲劳/不确定、时间信息、记录时间和评测批次；
+9. **不合成或自动生成用户评价**；未听标 \`PENDING_USER_LISTENING\`。
+
+首次听感是用于减少疲劳的操作方法，**不是客观真值**。只有稳定复现的缺陷或多组同文配对一致趋势，才能作为更强证据；对不确定/疲劳样本不强迫判输赢。
+
+### 分阶段向用户呈现，而不是灌满 24 条
+
+- **第一包（推荐）**：base vs step100，对固定集合选 4 条（两短、一中、一雨），默认最多 4 对。
+- **第二包（仅如有必要）**：step50 vs step100 或 step100 vs step150，在**最有区分力的 1–2 条文本**做最多 2–4 对；这一步只生成浏览页面的可选比较，不意味着追加训练。
+- 只有用户愿意继续，才扩展播放剩余固定样本。既有 WAV 保留，避免再生成和再次听疲劳。
+
+不要把 3 个 checkpoint 的训练 loss 排名直接当人耳优劣排名，尤其不能使用纯均分把复杂缺陷冲淡。
+
+## 25.8 Pilot 验收与停止后决策
+
+工作完成至少满足：
+
+- 官方 VoxCPM2 v2 LoRA 训练入口得到确认，数据清单可审计，训练隔离不破坏其他 worker；
+- 训练实测能在 16GB 下运行，若不能则如实 BLOCKED 而非伪造或无限 offload；
+- 不超过 150 optimizer steps，最多三个 checkpoint，具备模型/数据/参数/provenance；
+- 推理生成至多 6 个 base + 18 个 LoRA 固定对照，输出真实 WAV 与校验 hash；
+- 自动质量筛查生成可定位异常的对照清单，试听页面支持**每批 3–5 对及疲劳/不确定**；
+- 不假设 LoRA 必然提高自然度；没有人耳证据时全部标 \`PENDING_USER_LISTENING\`，不允许自动升级默认 adapter；
+- 训练结束**立即停止**，不要自动跑第二轮 rank/LR/steps sweep。
+
+报告区分四种状态：
+- \`PILOT_READY_FOR_USER_AB\`：样本与盲听包已生成，等用户审听；
+- \`BLOCKED_16GB\` / \`DATA_BLOCKED\` / \`API_BLOCKED\`：训练无法可靠进行，附具体失败证据；
+- \`PILOT_NO_CLEAR_GAIN\`：**仅在用户真实 A/B 评审后**才能写，不能根据 loss 宣称；
+- \`PILOT_PROMISING\`：**仅在用户真实 A/B 评审后**才能写，仍需后续扩大数据/验证。
+
+若首轮 LoRA 不明显优于 zero-shot，就优先保留 zero-shot；不要陷入“差一点、再训练 1000 steps”的循环。
+
+## 25.9 交付与 Devin 任务顺序
+
+在现有仓库添加**最小功能**，不要复制完整 OpenBMB/VoxCPM 到平台源码：
+
+- \`configs/training/suoming_voxcpm_lora_pilot.yaml\`：官方 v2 配置的可审核副本/映射，并注明确切上游版本；
+- \`scripts/prepare_voxcpm_lora_data.py\`：从旧 train split 导出训练 JSONL、sha/reject 清单与防泄漏核验；
+- \`scripts/train_voxcpm_lora_pilot.py\` 或 \`.ps1\`：preflight、官方训练入口、日志、资源记录、最多 150 steps、失败退出/有限回退；
+- \`scripts/evaluate_voxcpm_lora_pilot.py\`：加载原始 base 与三个 LoRA checkpoints，用共同条件输出 WAV 与 sidecar；
+- \`docs/reports/suoming-voxcpm-lora-pilot-v1.md\`：训练前数据统计、训练配置、step/loss/VRAM、每检查点样例/初筛，明确 Codec 风险和未人工验证之处；
+- \`outputs/gates/suoming_voxcpm_lora_pilot_v1/\`：本地 adapter、logs、manifest、metrics、WAV、listen/index.html；默认 gitignored，不提交原始语音/模型权重；
+- 测试：train-only 过滤、防泄漏、步数硬上限、失败退出、hash、LoRA adapter 正确加载、训练前后配置同一性、盲测 A/B 去重、\`UNCERTAIN_FATIGUE\` 导出行为。
+
+**执行顺序（严格）：**
+1. 拉最新 main；阅读本第 25 节、Phase 5A/5A2 报告及最新人耳备注；
+2. 核对官方 v2 LoRA 模板/训练器，确定本地已固定 base revision，准备 train-only 数据与 manifest；
+3. 显存/训练 1–2 step smoke；失败记录 STOP，不能无限升级训练工具；
+4. smoke 通过后，执行**一次**不超过 150 optimizer steps 的 LoRA pilot，保存 step50/100/150；
+5. 加载各 checkpoint 跑受控 raw 推理，生成 baseline 与 18 个以内 LoRA 测试音频，自动初筛；
+6. 生成低疲劳 A/B 页面，默认先呈现 4 对，导出 SHA 绑定评分；不要代替用户评审；
+7. 跑测试，提交 GitHub 的代码、manifest 模板/脱敏统计和诊断报告；
+8. **到此停止**，回报 commit、报告、可在本地打开的试听页与 BLOCKED/待人工项。后续是否扩训/升生产由用户决定。
+
+本轮禁止：修改 dotstts、换 TTS 底座、训练 Qwen/Dots、全参数 SFT、重做 Phase5A/5A2、自动切 P2、添加 EQ/降噪掩盖问题、进行大规模参数搜索、把未经用户试听的分数称为“通过”。
+
+网络规则保持：**本地缓存优先 → 镜像 → 失败才经 127.0.0.1:7897 代理**。
