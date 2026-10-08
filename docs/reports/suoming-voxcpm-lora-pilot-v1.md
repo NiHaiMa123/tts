@@ -160,3 +160,12 @@ docs/reports/suoming-voxcpm-lora-pilot-v1.md  # 本报告（入库）
 backend_envs/voxcpm2_train/                   # 独立训练 env（不入 git）
 backend_envs/voxcpm2/official_v203/           # 官方脚本+模板副本（不入 git）
 ```
+
+## 附录：Phase 5C 加载/生效审计（2026-10-08 补）
+
+详见 `docs/reports/suoming-voxcpm-lora-effect-audit-v1.md`。
+结论：**`ADAPTER_EFFECTIVE_NO_CLEAR_GAIN`** —— adapter 权重真实更新
+（LM+DiT 384 键）、推理侧 384/0 完整加载、开关实验逐字节证明生效且
+确定可复现；本报告中的 24 格输出 sha 全部复核无误、推理条件可比。
+用户 A/B 结果因此成立：LoRA 生效但无清晰主观增益，保留 zero-shot，
+pilot 关闭。训练/主观评分记录未改动。
