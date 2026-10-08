@@ -1,7 +1,8 @@
 # Phase 5B — VoxCPM2 LoRA 小规模可行性试验（Pilot v1）
 
 日期：2026-10-08 · 实验 ID：`suoming_voxcpm_lora_pilot_v1`
-状态：**`PILOT_READY_FOR_USER_AB`** — 试听包已就绪，等用户低疲劳 A/B 评审
+状态：**`PENDING_USER_DECISION`** — 用户已盲听 6/20 对（两个关键 pack），
+方向倾向 `PILOT_NO_CLEAR_GAIN`，正式结论待用户确认是否补听 pack3
 
 ## 结论先行
 
@@ -9,8 +10,11 @@
   官方入口、独立训练环境、无 OOM、无 NaN、无越界写生产路径。
 - 样本与盲听包已生成：6 base（全 sha 复用）+ 18 LoRA（3 ckpt × 6），
   24/24 ok、retry 全 0、无削波。
-- **未做任何音质结论**：`PILOT_NO_CLEAR_GAIN` / `PILOT_PROMISING`
-  只能在用户真实 A/B 后填写；当前主观项全 `PENDING_USER_LISTENING`。
+- **人耳 A/B（2026-10-08，用户本人）**：pack1 中 base 对 step100
+  **3 胜 1 负**；step50 vs step150 两对全 TIE——LoRA 未显示清晰增益。
+  评分 sha256 绑定 24/24 校验通过，见 §人耳 A/B 结果。
+- 结论未自动下判：`PILOT_NO_CLEAR_GAIN` / `PILOT_PROMISING` 由用户
+  在确认（可选补听 pack3）后填写。
 - 未自动追加任何训练；P2 未参与；生产默认未变。
 
 ## 训练溯源
@@ -116,16 +120,36 @@ train loss 在 0.6–0.9 间波动、val loss 无持续下降——150 step
 - [x] ≤150 optimizer steps、3 候选 ckpt、全 provenance
 - [x] 6 base 复用校验 + 18 LoRA 正式推理、真 SHA
 - [x] 自动初筛 + 每批 3–5 对 + 疲劳/不确定导出
-- [x] 主观全 `PENDING_USER_LISTENING`，无自动升级 adapter
+- [x] 主观项已回填用户 A/B（6/20 对），无自动升级 adapter
 - [x] 训练已停止，无第二轮 sweep
+
+## 人耳 A/B 结果（用户本人，2026-10-08）
+
+导出文件 sha 绑定 **24/24 验证通过**；已脱敏入库
+`docs/reports/suoming-voxcpm-lora-pilot-v1-ratings.json`。
+共评 6/20 对（pack1 全部 4 对 + pack2 全部 2 对），未标记疲劳，
+pack3 的 14 对导出为 pending、不计证据。
+
+| pair | 盲选 | 解盲赢家 | 缺陷标签/备注 |
+|---|---|---|---|
+| base-vs-100 · rain_seed42 | 甲 | **base** | 「更像是情感不对，这个更加清冷」（语速/停顿、其他） |
+| base-vs-100 · short_response_seed42 | 甲 | **ckpt100** | — |
+| base-vs-100 · short_response_2_seed42 | 乙 | **base** | — |
+| base-vs-100 · mid_exposition_seed42 | 甲 | **base** | — |
+| 50-vs-150 · short_response_seed42 | TIE | — | — |
+| 50-vs-150 · short_response_2_seed42 | TIE | — | — |
+
+**读数**：base vs step100 = **3:1**（LoRA 唯一胜场在短句 seed42）；
+step50 vs step150 不可分辨。与 ASR 辅助结果一致（无随 step 单调变化）。
+样本量为计划下限（6 对），方向倾向 `PILOT_NO_CLEAR_GAIN`，
+但正式结论尊重用户决定是否补听 pack3。
 
 ## 待用户决定
 
-1. 打开试听页完成第 1 组（4 对，约 5–10 分钟），疲劳即停；
-2. 据 A/B 结果选：`PILOT_NO_CLEAR_GAIN`（保留 zero-shot）或
-   `PILOT_PROMISING`（再谈扩数据/步数，仍需用户授权）；
-3. 是否使用 step50/100/150 中某一个做后续——未授权前生产默认
-   仍是 base zero-shot。
+1. （可选）补听 pack3 剩余 14 对，或直接接受当前 6 对读数；
+2. 确认结论：`PILOT_NO_CLEAR_GAIN`（保留 zero-shot，LoRA 路线存档）
+   或 `PILOT_PROMISING`（再谈扩数据/步数，仍需用户授权）；
+3. 未授权前生产默认仍是 base zero-shot，adapter 不升级。
 
 ## 产物（本地，全部 gitignored）
 

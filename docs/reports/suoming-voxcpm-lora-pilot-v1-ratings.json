@@ -1,0 +1,139 @@
+{
+  "experiment_id": "suoming_voxcpm_lora_pilot_v1",
+  "source": "user A/B listening export (sanitized)",
+  "exported_at": "2026-10-08T14:26:57.475Z",
+  "session": {
+    "fatigue": false,
+    "started_at": "2026-10-08T14:19:53.294Z",
+    "stopped_at": null
+  },
+  "truth_verified": 24,
+  "truth_total": 24,
+  "pairs_rated": 6,
+  "pairs_pending": 14,
+  "winner_tally": {
+    "base": 3,
+    "ckpt100": 1,
+    "TIE": 2
+  },
+  "pack1": [
+    {
+      "pair_id": "base-vs-100:rain_seed42",
+      "batch": "pack1",
+      "winner": "base/rain_seed42",
+      "winner_condition": "base",
+      "defect_tags": [
+        "语速/停顿",
+        "其他"
+      ],
+      "severity": "",
+      "first_impression": null,
+      "notes": "更像是情感不对，这个更加清冷",
+      "rated_at": "2026-10-08T14:22:22.848Z"
+    },
+    {
+      "pair_id": "base-vs-100:short_response_seed42",
+      "batch": "pack1",
+      "winner": "ckpt100/short_response_seed42",
+      "winner_condition": "ckpt100",
+      "defect_tags": null,
+      "severity": null,
+      "first_impression": null,
+      "notes": null,
+      "rated_at": "2026-10-08T14:22:58.473Z"
+    },
+    {
+      "pair_id": "base-vs-100:short_response_2_seed42",
+      "batch": "pack1",
+      "winner": "base/short_response_2_seed42",
+      "winner_condition": "base",
+      "defect_tags": null,
+      "severity": null,
+      "first_impression": null,
+      "notes": null,
+      "rated_at": "2026-10-08T14:23:12.962Z"
+    },
+    {
+      "pair_id": "base-vs-100:mid_exposition_seed42",
+      "batch": "pack1",
+      "winner": "base/mid_exposition_seed42",
+      "winner_condition": "base",
+      "defect_tags": null,
+      "severity": null,
+      "first_impression": null,
+      "notes": null,
+      "rated_at": "2026-10-08T14:24:23.901Z"
+    }
+  ],
+  "pairs": [
+    {
+      "pair_id": "base-vs-100:rain_seed42",
+      "batch": "pack1",
+      "winner": "base/rain_seed42",
+      "winner_condition": "base",
+      "defect_tags": [
+        "语速/停顿",
+        "其他"
+      ],
+      "severity": "",
+      "first_impression": null,
+      "notes": "更像是情感不对，这个更加清冷",
+      "rated_at": "2026-10-08T14:22:22.848Z"
+    },
+    {
+      "pair_id": "base-vs-100:short_response_seed42",
+      "batch": "pack1",
+      "winner": "ckpt100/short_response_seed42",
+      "winner_condition": "ckpt100",
+      "defect_tags": null,
+      "severity": null,
+      "first_impression": null,
+      "notes": null,
+      "rated_at": "2026-10-08T14:22:58.473Z"
+    },
+    {
+      "pair_id": "base-vs-100:short_response_2_seed42",
+      "batch": "pack1",
+      "winner": "base/short_response_2_seed42",
+      "winner_condition": "base",
+      "defect_tags": null,
+      "severity": null,
+      "first_impression": null,
+      "notes": null,
+      "rated_at": "2026-10-08T14:23:12.962Z"
+    },
+    {
+      "pair_id": "base-vs-100:mid_exposition_seed42",
+      "batch": "pack1",
+      "winner": "base/mid_exposition_seed42",
+      "winner_condition": "base",
+      "defect_tags": null,
+      "severity": null,
+      "first_impression": null,
+      "notes": null,
+      "rated_at": "2026-10-08T14:24:23.901Z"
+    },
+    {
+      "pair_id": "50-vs-150:short_response_seed42",
+      "batch": "pack2",
+      "winner": "TIE",
+      "winner_condition": "TIE",
+      "defect_tags": null,
+      "severity": null,
+      "first_impression": null,
+      "notes": null,
+      "rated_at": "2026-10-08T14:25:41.216Z"
+    },
+    {
+      "pair_id": "50-vs-150:short_response_2_seed42",
+      "batch": "pack2",
+      "winner": "TIE",
+      "winner_condition": "TIE",
+      "defect_tags": null,
+      "severity": null,
+      "first_impression": null,
+      "notes": null,
+      "rated_at": "2026-10-08T14:25:58.095Z"
+    }
+  ]
+}
