@@ -8,6 +8,16 @@
 
 ---
 
+## 当前执行状态与优先任务（2026-10-08）
+
+- **Phase 0–4：已由 Devin 实施并提交**，以 `docs/reports/suoming-backend-gate-v1.md` 和当前 `main` 为基线；不要重新搭平台、不要重新安装所有模型、不要重跑与本轮无关的全量 Gate。
+- 已有用户盲听评分已回填报告。VoxCPM2 **zero-shot 清澈度/磨砂改善/角色相似度/自然度 = 5/5/5/3**；但 VoxCPM2 **Codec roundtrip = 1/1/4/5**。此冲突需要诊断，不能以 zero-shot 一条高分直接宣布训练准入。
+- **本轮唯一执行目标：Phase 5A — VoxCPM2 小样本复现、Codec 异常排查、Prompt A/B 与训练决策报告**，详见第 23 节。优先复用本地环境与模型，不开展 LoRA/SFT。
+- Dots 和 Qwen3-TTS 继续作为既有 baseline；不得因此删除后端、改动旧 `dotstts` 仓库或重构通用架构。
+- 有效命令：Devin 拉取 `main` 后按第 23 节执行，完成后提交诊断代码、报告与脱敏评分元数据，**停在用户训练决策门前**。
+
+---
+
 ## 0. 核心原则
 
 ### 0.1 这不是另一个模型 fork
@@ -845,18 +855,13 @@ python -m pytest
 
 提交 GitHub。
 
-## Phase 5 — 用户试听后再规划训练
+## Phase 5 — 用户试听与单后端验证
 
-**Phase 5 不在本轮自动执行。**
+**Phase 5A（当前允许执行）**：仅验证 VoxCPM2 的音质可重复性、Codec roundtrip 低分原因、不同参考音频对自然度的影响；详见第 23 节。
 
-用户试听后，根据结果决定：
+**Phase 5B（当前禁止执行）**：训练方案设计/小规模 LoRA/SFT 或 checkpoint 对比。必须在 Phase 5A 报告交付、用户确认后另行授权。当前即使存在 5/5/5/3 的 zero-shot 高分，也不构成训练许可。
 
-- VoxCPM2 LoRA/SFT
-- Qwen3-TTS fine-tune
-- 两者都训
-- 或淘汰某 backend
-
-不得在没有用户评价时自动进入大规模训练。
+Qwen3-TTS 和 Dots 保留现状作为对照，不自动启动额外训练。
 
 ---
 
@@ -1006,7 +1011,7 @@ Devin 完成本计划 Phase 0–4 后，至少提交：
 2. 阅读完整 `PLAN.md`；
 3. 检查本机旧 `dotstts` 路径和已有模型/cache；
 4. 优先复用本地 cache，避免重复下载；
-5. 按 Phase 0 → 4 执行；
+5. 若 Phase 0–4 已在 Git 历史中完成，则**直接执行第 23 节的 Phase 5A**，不得为了“按计划”重复全部 Phase 0–4；
 6. 每个 Phase 完成后先测试再继续；
 7. 发现模型/API 与计划假设不一致时，以官方实际接口为准，但保持架构边界；
 8. 不因单一 backend 阻塞整个任务：记录 BLOCKED 后继续其他 backend；
@@ -1019,4 +1024,202 @@ Devin 完成本计划 Phase 0–4 后，至少提交：
    - BLOCKED 项
    - 推荐下一步
 
-**不要在本轮开始大规模训练。**
+**当前轮次仅限 Phase 5A；不得开始任何 LoRA/SFT 训练。**
+
+
+---
+
+# 23. Phase 5A — 锁暝 VoxCPM2 稳定性与 Codec 异常专项（当前执行）
+
+## 23.1 基线与问题定义
+
+用户在本项目 \`docs/reports/suoming-backend-gate-v1.md\` 记录的真实盲听结果（评分 1–5，**越高越好**；\`grit\` 分数高表示磨砂问题更少，并非磨砂更多）：
+
+| 样本 | clarity | grit（少磨砂为高） | likeness | naturalness |
+|---|---:|---:|---:|---:|
+| 克隆参考原声（谛天鉴） | 5 | 5 | 5 | 5 |
+| validation 原声（午后凉风） | 3 | 3 | 4 | 5 |
+| Dots Step500 LoRA | 5 | 5 | 2 | 2 |
+| Dots zero-shot | 5 | 5 | 1 | 2 |
+| VoxCPM2 Codec roundtrip | 1 | 1 | 4 | 5 |
+| **VoxCPM2 zero-shot** | **5** | **5** | **5** | **3** |
+| Qwen3-TTS Codec roundtrip | 1 | 1 | 4 | 5 |
+| Qwen3-TTS zero-shot | 1 | 4 | 3 | 3 |
+
+上面的数据是**用户对既有样本的评分，不是新实验预测**。禁止篡改、平均成“总分”或宣称 VoxCPM2 已通过所有音质 Gate。
+
+待回答的三个核心问题：
+
+1. VoxCPM2 zero-shot 的高分，在**不同文本和随机种子**上是否稳定？
+2. VoxCPM2 原声 Codec roundtrip 的 1/1 是**接入错误、输入采样率/解码处理错误，还是 Codec 本身在这类游戏录音上的重建局限**？它与 zero-shot 的巨大差异是否可信？
+3. 在不训练、不后处理、不调整模型权重的条件下，**更换 Prompt** 能否改善当前仅 3 分的自然度，同时保持角色相似度和清澈度？
+
+**严禁使用单条主观高分推出“底座必然更好”，也严禁使用一条 Codec 低分推出“所有微调必然失败”。**
+
+## 23.2 范围与预算
+
+本轮仅允许以下 bounded cases：
+
+- 稳定性集：**4 个测试文本 × 3 个 seed = 12 个 VoxCPM2 zero-shot WAV**。
+- Prompt A/B 集：**3 个 Prompt（含现用 Prompt） × 2 个固定测试文本 × 1 个固定 seed = 6 个 WAV**；如与稳定性集完全同配置，可复用已有 WAV，不重复推理。
+- Codec 专项：先**复查现有代码/已有 WAV**；只对 **当前 validation anchor + 另一条独立干净原声**做受控重建。必要时可为同一条音频新增不超过 2 种有明确假设的诊断变体（例如采样率处理 A/B），必须记录变更，不做广泛 sweep。
+- Dots/Qwen：仅复用既有 baseline，不再为它们生成新一轮覆盖性测试。
+- 若模型一次性加载后出现偶发 OOM、坏句，保留失败证据，不通过无限重试“刷高成功率”。
+
+**预算上限：不计必要的人工重跑和代码单元测试，VoxCPM2 新生成的 zero-shot 案例原则上不超过 18 个；Codec 诊断只按上述限定范围。** 如扩展必须在报告中解释理由并停止待用户确认。
+
+本轮不安装额外大型 ASR/TTS 模型。若本地已有可复用 ASR，可用作辅助检查；无则先给人工逐字核对 UI，不得因 ASR 缺失而假装文本正确。
+
+## 23.3 任务 A — 冻结参考数据与公平复现
+
+开始前：
+
+1. 拉取最新 \`main\`，确认旧 Phase 0–4 文件不被覆盖。
+2. 确认 \`configs/characters/suoming.yaml\` 中 clone Prompt（**谛天鉴**）和 held-out ground truth（**午后凉风**）分离，并验证 \`sha256\`；不要把待评测原声当 clone Prompt（数据泄漏）。
+3. 保留既有 \`outputs/gates/suoming_v1/\`，**本轮放到新目录**：\`outputs/gates/suoming_voxcpm_phase5a/\`。
+4. 冻结 base model revision、\`voxcpm\` package version、设备/精度、现用 inference_timesteps/cfg_value、参考音频与文本；不添加 denoiser、EQ、loudness polish，不静默启用 retry 或改变参数。
+5. 创建 machine-readable experiment manifest，每个 case 记录：case_id、text_id、text、prompt_id、prompt hash、seed、effective generation args、model revision、sample rate、output hash、耗时、失败原因和 retry count。
+6. 输出波形原始采样率，允许另导出仅供盲听的统一响度副本，但必须保留 raw，并且 A/B 不得混淆 raw 与 matched 文件。
+
+为了检查自然度与稳定性，本轮生成时必须记录调用 \`retry_badcase\` 是否启用、底层是否真的重试以及次数；做不到就标为 \`unknown\`，不能宣称“一次生成成功率”。
+
+## 23.4 任务 B — 稳定性集（12 WAV）
+
+从已审查锁暝文本中选 **4 个测试文本**，按以下不同语境：
+
+1. 现有“午后凉风……”：固定锚点（有独立 ground truth）。
+2. 1 条短句：接近游戏内简短回应。
+3. 1 条中等长度、连续说明文本：检验连读与韵律。
+4. 1 条带停顿/情绪变化的台词：检验失稳和异常发声。
+
+优先使用未参与训练的 validation/test 文本，标记 split；如采用新写文本，也明确标记 \`unseen_new_text\`。不得用属于当前 clone Prompt 的语音作“独立 ground truth”。
+
+固定同一个参考 Prompt（当前谛天鉴）和所有采样参数；每条文本使用 **seed = 42、43、44**。生成命名应可反推 text/seed，如 \`stability/rain_seed42.wav\`。
+
+对每个案例检查：
+
+- WAV 可读、无 NaN/Inf、无全静音、无明显截断/削波；
+- 句子是否完整：漏词/错词/吞字/异常插话/重复字，优先人工对照，有现成 ASR 则统计 CER 作为辅助；
+- 发音异常：咬字、舌位、顶嗓/前顶、气声或“磨砂”、发音形态突变；
+- 自然度：韵律、停顿、重音、尾音衰减；
+- 角色相似度：相同文本不同 seed 的音色漂移；
+- 每条实际运行耗时、raw 输出时长、是否自动 retry。
+
+盲听表每个样本至少保留：\`clarity\`、\`grit\`（高分为好）、\`likeness\`、\`naturalness\`、\`text_complete\`（是/否/待审）、\`artifact_type\`、\`notes\`。
+
+可计算客观频谱指标与时长差异，但不能把其变成代理“听感总分”；句子短不应自动被判定不稳。**未得到用户本人评分时全部记为 \`PENDING_USER_LISTENING\`，不可由 Agent 编造。**
+
+## 23.5 任务 C — VoxCPM2 Codec roundtrip 1/1 低分专项
+
+目标不是“把 Codec 指标调好看”，而是分清**实现 bug 和模型能力边界**。
+
+要求：
+
+1. 检查 \`workers/voxcpm_worker.py\` 的 \`handle_codec_roundtrip\` 与所安装 **voxcpm 2.0.3 的实际 AudioVAE V2 API**，逐项验证 tensor 形状、输入采样率、\`preprocess\`、\`encode()\`、\`decode()\` 返回结构、设备/dtype、解码真实输出采样率。
+2. 核对 **16 kHz encode / 48 kHz decode** 的非对称链路；必须明确限制在 16k 采样输入时，原始 8kHz 以上的细节不能凭空恢复。高频指标变化应区分“原始数据不可恢复”和“实现错误/声码器失真”。
+3. 对 ground truth 与 roundtrip WAV **先做延时对齐**，并对齐增益后再比较相同片段；另保留不对齐 raw 用于实际试听。
+4. 比较 ground truth / 编码前 16k 输入（可供试听的重采样版本）/ Codec roundtrip 三条链；辨别纯下采样损失与 Codec 引入的额外颗粒、金属感或失真。另一条独立参考音频重复该诊断，避免单条特殊录音误判。
+5. 给出共同有效频带内（例如 0–7.5kHz，必要时分 0–4k / 4–7.5k）的谱差、相关性/重建残差、能量和时间对齐证据，外加至少一张对齐的 spectrogram；仍以人工听感为准。
+6. 检查 zero-shot 实际调用的 decoder 与这个 roundtrip 是否是同一条解码路径；若输入分布、条件或推理方式不同，明确给出差异，**不能把 roundtrip 低分直接外推到生成音质**。
+7. 不得通过新加降噪、EQ、HF shelf、spectral stabilizer 掩盖问题；如发现确凿实现 bug，写回归测试并修正 worker 后**仅重跑必要 Codec case**。
+
+本任务必须输出明确分类：
+
+- \`implementation_bug_confirmed\`
+- \`codec_reconstruction_limit_supported\`
+- \`unresolved\`
+
+每个结论要列证据与反证；不能只看 flatness 相似与否。
+
+若仍为 \`codec_reconstruction_limit_supported\`，后续训练 eligibility 保持“需要用户批准的例外/风险”，不能由 Agent 自动判为通过。
+
+## 23.6 任务 D — Prompt A/B（6 WAV）
+
+在 \`dotstts\` 已审查音频资产中选 3 条：
+
+- **P0**：当前 25s 谛天鉴 Prompt（必须保留基线）；
+- **P1**：质量较高、较干净、发音自然的候选；
+- **P2**：不同语气/句式但说话人一致的候选。
+
+要求：
+
+- 每个 Prompt 需有严格匹配的文本，逐字检查；有参考 hash、持续时长、来源及数据 split。优先无杂音、无角色串音、无爆音；不要默认越长越好。
+- 同一 Prompt A/B 时固定模型、sampling、seed=42，使用 2 个文本（包括雨景锚点与另一个文本），保证唯一变量是 Prompt。
+- 默认不做降噪、时间拉伸、动态压缩、EQ 等改变参考音色的处理。
+- 依赖用户盲听判断是否更自然且不牺牲角色相似、清澈度。
+- Prompt 必须与 ground truth 独立；不能拿锚点真实原声作为 Prompt 来生成同一句以取得虚假的相似度。
+
+即使出现更高分，也不应直接修改用户日常 production 默认 Prompt；先将候选写为显式 \`candidate\`，待用户确认后切换。
+
+## 23.7 任务 E — 修正试听评分资产与实验可追踪性
+
+当前仓库报告已包含用户此前导出的评分摘要，但是需要保留**可机读、脱敏的原始评分记录**。
+
+- 优先从本地现有 \`outputs/gates/suoming_v1/listen/listen-ratings.json\` 读取；若不存在，保留报告中的评分作为 \`report_transcription\` 并标明不是原始 JSON，**禁止杜撰原始评分文件**。
+- 经脱敏后保存到 \`docs/reports/suoming-gate-v1-user-ratings.json\`，包括来源、评分方向（高分代表改善）、样本相对路径、原有四维分数与已有备注；不存机器私有绝对路径、账号或 token。
+- 新试听页可以导出 Phase 5A 评分，包含 \`experiment_id\` + \`case_id\` + \`output_sha256\`，防止重生成后旧评分套在新 WAV 上。
+- 静态试听包按 \`ground truth / baseline / stability / prompt AB / codec diagnostics\` 分类，**同时保留匿名盲听视图与可解盲映射**。人工主观栏默认 \`PENDING_USER_LISTENING\`。
+- 修复已知残留风险：重跑同名 case 时必须保证对应 WAV 是本轮新生成或经 sidecar hash 和 case manifest 明确验证为合法复用；不能因“已有同名 WAV”而假报 \`ok\`。
+- 尽量不改 WebUI 大框架，只复用现有 listen page / gate 工具；不要引入复杂数据库。
+
+## 23.8 任务 F — 训练准入决策与退出条件
+
+机检指标仅判断“可运行/可复现”；真正的音质 Gate 需用户评分：
+
+| 维度 | 阶段性要求 | 由谁判断 |
+|---|---|---|
+| 稳定性 | 12 个样本都有明确完整性/异常记录；若有坏句保留案例，不无限刷 seed | Agent 提交证据，用户确认听感 |
+| 自然度 | 不再只依据一条 3 分样本；要给用户可比较的多句 Prompt A/B 证据 | 用户 |
+| 清澈度/磨砂 | 与现有 5/5 的高分 zero-shot 基线 A/B；新 case 不可被响度/后处理美化 | 用户 |
+| 角色相似度 | P0/P1/P2 各有同文对照；避免因 Prompt 泄漏而虚高 | 用户 |
+| Codec 异常 | 1/1 低分原因按 23.5 分类；若未解决，报告保留训练风险 | Agent 诊断 + 用户审阅 |
+| 数据 | 训练集没有被本轮修改；所有样本来源、split、hash 可追踪 | Agent |
+
+输出训练建议只能三选一，附可审计理由：
+
+1. \`RECOMMEND_VOXCPM2_LORA_PLAN\`：稳定性和用户试听支持，Codec 风险已解释/经用户接受；
+2. \`MORE_EVIDENCE_NEEDED\`：有明确未解决的声音或链路问题；
+3. \`DO_NOT_TRAIN_YET\`：多 seed 大量不稳定、文本错误、音色漂移或明显声学上限。
+
+**即使是选项 1，也只是“建议制定下一轮训练方案”，本轮不启动 LoRA/SFT。训练与是否接受 Codec 风险均需用户明确决定。**
+
+### 停止规则
+
+- 某根因假设最多做有限 A/B，连续 2 次不能提供新信息应停止该分支并标记 \`unresolved\`；
+- 不得因为要把分数刷到 5/5 而自训练、无限换 Prompt、无限跑 seed；
+- 成功的技术定义是生成**可信试听证据和清楚的下一步选择**，不是宣称质量问题解决。
+
+## 23.9 本轮产物与提交
+
+必须新增或更新：
+
+- \`configs/evaluations/suoming_voxcpm_phase5a.yaml\`（或等价机器可读 manifest）；
+- \`scripts/run_voxcpm_phase5a.py\`（或在现有 gate 中增加专用入口，避免复制旧业务代码）；
+- \`docs/reports/suoming-voxcpm-phase5a.md\`（含 12-case 表、Prompt A/B 表、Codec 归因证据、异常实例、下一步建议）；
+- \`docs/reports/suoming-gate-v1-user-ratings.json\`（若原始数据可用则真实转换，否则标记 \`report_transcription\`）；
+- \`outputs/gates/suoming_voxcpm_phase5a/manifest.json\`、\`metrics.json\`、\`listen/index.html\` 和本地 WAV；大 WAV **不直接提交普通 Git**；
+- 对新增诊断/重用逻辑的单元测试，以及必要的真实 backend smoke 结果。
+
+报告末尾必须有：
+
+1. **VoxCPM2 原因分类**：Codec 1/1 究竟是何种证据支持的结果；
+2. **零样本稳定性**：12 个 case 的状态、重要异常、用户未听则 \`PENDING_USER_LISTENING\`；
+3. **Prompt 选择**：P0/P1/P2 的利弊，未听则不擅自选赢家；
+4. **训练建议**：三种枚举之一，以及明确的 \`PENDING_USER_DECISION\`；
+5. **可复现性**：git commit、模型 revision、prompt sha、seed、case 文件、测试结果；
+6. **BLOCKED / 未完成**：准确说明，不以“没有报错”冒充质量合格。
+
+最后提交 GitHub，并向用户报告 commit 与试听页在其**本地工作目录**的真实位置。如果试听 WAV 未提交 Git，必须直说它们仅在本地存在；不编造在线可打开的 GitHub WAV 链接。
+
+## 23.10 Devin 本轮执行顺序
+
+1. \`git pull\` 最新 \`main\`，通读本节与现有评价；不要重复 Phase 0–4。
+2. 校验本机旧资产、本地模型和现有评分来源。
+3. 优先完成 Codec 1/1 异常的**静态代码检查和已有录音分析**，避免先重复下载/渲染。
+4. 实施受限 Codec 实验，保留结果与测试。
+5. 执行 12-case 稳定性集合、6-case Prompt A/B；生成新试听页面。
+6. 计算描述性指标、逐条验证音频存在与 SHA256，写清缺失的人工评分。
+7. 生成评测报告、运行测试、提交 GitHub。
+8. **停止在用户听评与训练决策门前**，不启动微调、不扩展新后端。
+
+网络仍遵守：**本地缓存 → 可用镜像 → 镜像失败后 127.0.0.1:7897 代理**；代理仅限相关进程，勿修改全局设置。
