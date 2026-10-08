@@ -1,0 +1,65 @@
+# Phase 5A2 — VoxCPM2 P0/P2 short-utterance paired stability check
+# (PLAN.md section 24). Hard budget: <=10 new zero-shot WAVs; the 4 P0
+# cells are reused from suoming_voxcpm_phase5a after sha verification.
+# Only the prompt changes; all generation args stay frozen.
+experiment_id: suoming_voxcpm_phase5a2
+output_dir: outputs/gates/suoming_voxcpm_phase5a2
+character: suoming
+backend: voxcpm2
+# Read-only prior experiment for the four reused P0 baselines.
+reuse_from: outputs/gates/suoming_voxcpm_phase5a
+
+prompts:
+- id: P0
+  role: baseline
+  split: inbox_reference
+  source: data/inbox (legacy reviewed asset)
+  audio: ${DOTSTTS_ROOT}/data/inbox/锁暝/中立_neutral/【中立_neutral】谛天鉴除了处理岁主事务，也掌管天文、历法。各州分鉴各有职责，梦州也有自己——唔……先前御者说对谛天鉴了解不多，不知不觉话多了些。总之，谛天鉴为岁主尽责，那自然，.wav
+  sha256: c4322e3230ab952edb7cd456329cb5b48195d9f33c5459c0ba76d8d79d3a7f92
+  text: 谛天鉴除了处理岁主事务，也掌管天文、历法。各州分鉴各有职责，梦州也有自己——唔……先前御者说对谛天鉴了解不多，不知不觉话多了些。总之，谛天鉴为岁主尽责，那自然，御者若有所求，无论缘由，我都会回应。
+- id: P2
+  role: candidate
+  split: validation
+  source: datasets/suoming/v1/validation.jsonl#0 fid=27cd4b76528acdb6
+  audio: ${DOTSTTS_ROOT}/data/work/standardized/e6/e60e291ffb3431fadc10be7089662e9e24274476fd48b9d42bde3f921a18cbd7.wav
+  sha256: fb77c9bb8f4ad75d311e568171dca73c34be001dcf8fe11fbcc018aab66e29cb
+  text: 我始终想着，有一日能回到华亭，住进一间小屋。若这里需要我，我便出手相助；若不需要，便与九契他们一同，看小城在风平浪静中日来月往，如此便足够了。当然，那还是很遥远的事，眼下，心月狐与梦州大局为先。
+
+texts:
+- id: short_response
+  split: validation
+  source: datasets/suoming/v1/validation.jsonl#3 fid=4256545f053373b0
+  audio: ${DOTSTTS_ROOT}/data/work/standardized/aa/aae6df63e7bef70963d326a60a55c936ad8679dd969e08bee0020c8317be7056.wav
+  sha256: 36a16737ef9f493c8379cfca50143acf9c368a255c7246e117a37fc4d154f3f0
+  text: 开伞，由我来动手。
+- id: short_response_2
+  split: test
+  source: datasets/suoming/v1/test.jsonl#14 fid=c3dbe43cdc84
+  audio: ${DOTSTTS_ROOT}/data/work/standardized/bc/bc65e163165392b422ade1698fc883048908c147ac873fd8e6e728fae0f8ba0f.wav
+  sha256: 55656bc9abc7ba33ca1fb71c0c557bf2bc9e773fa105daec68f63346b9a93bd8
+  text: 有什么在跟着我们
+- id: mid_exposition
+  split: validation
+  source: datasets/suoming/v1/validation.jsonl#2 fid=33e707acde1f4e22
+  audio: ${DOTSTTS_ROOT}/data/work/standardized/bf/bf4d26c9b7957e8fcc5a15e24fa8d03f412af4dfa152837207bc9c4a4f48f683.wav
+  sha256: 674473ffbc1f386c2d96ff19cbd43c54de9376852dd3d465b2c5e6452830293d
+  text: 若论诞生年岁，心月狐还比我小些，加之我协助「岁主」已久，见祂走到今日，难免心生欣慰。无论是昔日独自重塑「文明之匣」，还是如今真正成为「岁主」，心月狐都未曾辜负「岁主」的期望。
+
+# 7 pairs: same text + same seed, only the prompt differs.
+# p0_source=reuse pulls the exact Phase 5A wav (sha-verified);
+# p0_source=generate means the P0 cell is newly generated.
+matrix:
+- pair_group: A
+  text: short_response
+  seeds: [42, 43, 44]
+  p0_source: reuse
+  reuse_prefix: stability/short_response
+- pair_group: B
+  text: short_response_2
+  seeds: [42, 43, 44]
+  p0_source: generate
+- pair_group: C
+  text: mid_exposition
+  seeds: [44]
+  p0_source: reuse
+  reuse_prefix: stability/mid_exposition

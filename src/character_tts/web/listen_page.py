@@ -478,3 +478,100 @@ def write_phase5a_listen_page(output_dir: str | Path,
     (listen_dir / "unblind_map.json").write_text(
         json.dumps(unblind, ensure_ascii=False, indent=2), encoding="utf-8")
     return out
+
+
+def write_phase5a2_listen_page(output_dir: str | Path,
+                               manifest: dict[str, Any],
+                               rng_seed: int = 20261008) -> Path:
+    """Paired blind-listening page for Phase 5A2.
+
+    Each pair (same text + seed) is one section; the P0/P2 cells appear
+    as anonymous 甲/乙 in a deterministic-but-randomized order so prompt
+    identity stays hidden. Reveal toggle + ``unblind_map.json`` expose
+    the truth; exports bind experiment_id + case_id + output_sha256.
+    """
+    import random
+
+    output_dir = Path(output_dir)
+    listen_dir = output_dir / "listen"
+    listen_dir.mkdir(parents=True, exist_ok=True)
+
+    cases = {c["case_id"]: c for c in manifest.get("cases") or []}
+    groups: list[dict[str, Any]] = []
+    unblind: dict[str, Any] = {}
+
+    # Calibration originals — not blinded.
+    orig_items = []
+    for fname, label, cid in (
+            ("ground_truth_original.wav", "原声·validation 午后凉风",
+             "original/ground_truth_rain"),
+            ("prompt_P0_original.wav", "Prompt 音频·甲来源",
+             "original/prompt_P0"),
+            ("prompt_P2_original.wav", "Prompt 音频·乙来源",
+             "original/prompt_P2")):
+        p = output_dir / fname
+        if not p.is_file():
+            continue
+        dur, sr = _duration_sr(p)
+        orig_items.append({
+            "case_id": cid, "label": label, "src": f"../{fname}",
+            "sha256": None, "error": None,
+            "duration": dur, "sample_rate": sr,
+        })
+    if orig_items:
+        groups.append({"key": "originals", "title": _GROUP_TITLES[
+            "originals"], "items": orig_items})
+
+    # One group per pair; side order shuffled deterministically.
+    for i, pair in enumerate(manifest.get("pairs") or []):
+        cells = [cases[cid] for cid in pair["cells"] if cid in cases]
+        rng = random.Random(f"{rng_seed}:{pair['pair_id']}")
+        order = list(range(len(cells)))
+        rng.shuffle(order)
+        items = []
+        for side, idx in enumerate(order):
+            c = cells[idx]
+            label = ("甲", "乙")[side]
+            rel = c.get("output")
+            src = f"../{rel}" if rel else None
+            dur, sr = _duration_sr(output_dir / rel) if rel else ("?", "?")
+            items.append({
+                "case_id": c["case_id"], "label": label,
+                "src": src, "sha256": c.get("output_sha256"),
+                "error": None if c.get("status") == "ok"
+                else (c.get("error") or c["status"]),
+                "duration": dur, "sample_rate": sr,
+            })
+            unblind[f"{pair['pair_id']}:{label}"] = {
+                "case_id": c["case_id"], "prompt_id": c.get("prompt_id"),
+                "text_id": pair["text_id"], "seed": pair["seed"],
+                "src": rel, "output_sha256": c.get("output_sha256"),
+                "reused_from": c.get("reused_from"),
+            }
+        groups.append({
+            "key": pair["pair_id"],
+            "title": f"配对 {i + 1}：{pair['text_id']} · "
+                     f"seed {pair['seed']}",
+            "items": items,
+        })
+
+    payload = {
+        "experiment_id": manifest.get("experiment_id"),
+        "meta": (
+            f"实验 {manifest.get('experiment_id')} · "
+            f"backend {manifest.get('backend')} · "
+            f"rev {str(manifest.get('model', {}).get('revision'))[:12]}\n"
+            "每个配对内 甲/乙 为匿名条件（同一文本同一 seed，仅 Prompt "
+            "不同）；点「解盲」看真实 case_id。主观评分默认 "
+            "PENDING_USER_LISTENING。"),
+        "groups": groups,
+    }
+    page = _PHASE5A_TEMPLATE.replace(
+        "__TITLE__", html.escape(
+            f"Phase 5A2 配对盲听 — {manifest.get('experiment_id')}")).replace(
+        "__SAMPLES__", json.dumps(payload, ensure_ascii=False))
+    out = listen_dir / "index.html"
+    out.write_text(page, encoding="utf-8")
+    (listen_dir / "unblind_map.json").write_text(
+        json.dumps(unblind, ensure_ascii=False, indent=2), encoding="utf-8")
+    return out
