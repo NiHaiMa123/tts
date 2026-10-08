@@ -8,14 +8,14 @@
 
 ---
 
-## 当前执行状态与优先任务（2026-10-08，Phase 5B Pilot）
+## 当前执行状态与优先任务（2026-10-08，Phase 5C）
 
-- **Phase 0–4、5A、5A2 已完成且已有人耳评分**。最新 Phase 5A2 评分提交：`a3f8e57`；历史结果不得覆盖，详见 `docs/reports/suoming-voxcpm-phase5a2.md`、`docs/reports/suoming-voxcpm-phase5a2-ratings.json`。
-- 用户说明**多次连续听非常相似的 TTS 音频后会感觉难以听出区别**。同 SHA 同音频跨场次分数剧变主要反映听觉适应/疲劳、试听上下文和评分尺度漂移，**不是音频重新合成出了不同缺陷**。既有分数保留作为原始观察，后续不得将其机械计算成真实坏句率或据此认定 P2 稳定失败。
-- **当前唯一执行目标：第 25 节 Phase 5B —— VoxCPM2 单次、受控、低预算 LoRA pilot + 少量高可信 A/B 评测**。不再做 Phase 5A3/连续刷 Prompt/种子，优先自动筛查与首次印象，降低人的试听负担。
-- P0（谛天鉴）仍是生产参考基线；P2（回到华亭）只作候选。Codec 重建失真已确认且记录为**试训风险**：这次试训用于验证 TTS 生成改善潜力，不代表接受 Codec 失真作为最终质量。
-- 保留三个独立 backend 和当前 WebUI，**不重构基础平台、不修改旧 dotstts、不训练 Dots/Qwen、不更新生产默认 LoRA/Prompt**。
-- Devin 拉取 `main` 后**只执行第 25 节**；最多 150 个优化器步骤与 3 个训练检查点，生成有界试听证据后停止，等待用户最终审核。若不具备可靠数据/显存/官方 API 条件，标明 BLOCKED，不勉强训练。
+- **Phase 0–4、5A、5A2、5B Pilot 均已执行**。最新代码与评分提交分别为 `ed40003`、`1bc846c`。Phase 5B 官方 VoxCPM2 v2 LoRA 试训完成 150 optimizer steps，checkpoint 50/100/150，训练集 127 条约 809.5 秒、验证样本 8 条、峰值显存报告 15.8GB。请保留原始 artifacts 和评级记录，不能覆盖历史数据。
+- **第一批盲听**：base vs checkpoint100 的 4 对中 base 3 胜、LoRA 1 胜；step50 vs step150 两对为 TIE，剩余 14 对无须强制补听。当前证据仅支持「没有观察到明确的 LoRA 收益」，**不代表 LoRA 技术原则上无效**。用户反映连续听高度相似样本易听觉适应，本轮不做大型试听。
+- **本轮唯一执行目标：第 26 节 Phase 5C —— LoRA 加载完整性、参数更新及开/关生效性审计**。优先静态检查和 checkpoint 审计；仅当必要时用最少的固定 WAV 做控制实验。**不再训练，不扩充模型、Prompt 或种子搜索。**
+- 原生产默认维持 VoxCPM2 base Zero-shot + P0 参考；P2 仍是候选，不推广任何 LoRA checkpoint。
+- Devin 拉取 `main` 后只执行第 26 节，不重复旧阶段。可为修复明确的评测/日志 Bug 做局部修改，但不能把此任务演变成新一轮训练；完成后报告并提交 GitHub。
+
 ---
 
 ## 0. 核心原则
@@ -861,7 +861,7 @@ python -m pytest
 
 **Phase 5A2（已完成）**：P0/P2 双短句多 seed 与评分一致性复核已完成；同音频跨场次评分变化很大且用户报告听觉适应，因此不得将旧单项评分作为硬性失败率；详见第 24 节与评分文件。
 
-**Phase 5B（当前 ACTIVE）**：仅执行第 25 节明示的**一次受控 LoRA pilot**。允许训练的只有 VoxCPM2 LoRA，最多 150 optimizer steps、3 个保存点；是否继续更多步数、提升为生产版本、扩大数据/模型须由用户再次明确授权。
+**Phase 5B（已完成）**：已执行第 25 节明示的一次受控 VoxCPM2 LoRA pilot（150 optimizer steps、三个 checkpoint），并回收第一组 A/B 结果；训练和试听数据仅作历史事实，不可重新执行。**Phase 5C（当前 ACTIVE）**：只执行第 26 节 LoRA 加载与生效审计，不授权训练。
 
 Qwen3-TTS 和 Dots 保留现状作为对照，不自动启动额外训练。
 
@@ -1026,7 +1026,7 @@ Devin 完成本计划 Phase 0–4 后，至少提交：
    - BLOCKED 项
    - 推荐下一步
 
-**本轮仅按第 25 节允许一次受限 VoxCPM2 LoRA pilot；其余模型训练仍禁止。**
+**注意：以上第 22 节是历史执行规则；当前以第 26 节 Phase 5C 为唯一执行指令，不允许新的训练。**
 
 
 ---
@@ -1342,9 +1342,9 @@ Devin 完成本计划 Phase 0–4 后，至少提交：
 
 ---
 
-# 25. Phase 5B — VoxCPM2 LoRA 小规模可行性试验与低疲劳盲听（ACTIVE）
+# 25. Phase 5B — VoxCPM2 LoRA 小规模可行性试验与低疲劳盲听（历史已完成）
 
-> **唯一当前任务。** 这是研发 pilot 而不是产品质量验收；允许 Devin **在本地执行一次受限 LoRA 训练**，但不授权长期训练、不允许自动扩大训练步数或更改正式生产模型。用户已报告连续听相似音频会逐渐“听不出了”，因此试听设计必须降低听觉适应/疲劳造成的偏差。
+> **历史阶段（COMPLETED）**。本节记录已完成的单次 pilot 设计，不再作为训练授权。后续唯一当前任务是第 26 节 Phase 5C。用户已报告连续听相似音频会逐渐“听不出了”，所以新阶段只做技术生效审计。
 
 ## 25.1 决策依据与目标
 
@@ -1539,3 +1539,159 @@ C. 主观声音异常辅助定位：
 本轮禁止：修改 dotstts、换 TTS 底座、训练 Qwen/Dots、全参数 SFT、重做 Phase5A/5A2、自动切 P2、添加 EQ/降噪掩盖问题、进行大规模参数搜索、把未经用户试听的分数称为“通过”。
 
 网络规则保持：**本地缓存优先 → 镜像 → 失败才经 127.0.0.1:7897 代理**。
+
+
+---
+
+# 26. Phase 5C — VoxCPM2 LoRA 加载与实际生效核查（ACTIVE）
+
+> 本轮是**纯推理/权重审计任务**，不是 Phase 5B 的训练延长，也不要求用户重新完整试听。必须在现有 3 个 checkpoint、base 模型、原配置和固定 P0 下完成；没有可核验证据不得宣称“LoRA 正确生效”，也不得把当前低分归咎于训练步数不足。
+
+## 26.1 当前已知证据及待区分的假设
+
+固定已完成项目：
+
+- 项目仓库：\`NiHaiMa123/tts\`；
+- Phase 5B 代码提交 \`ed40003\`，评分回填 \`1bc846c\`；
+- 训练入口 VoxCPM2 官方 v2 @ \`19b6bf7590025418821a86dcb817504e0ad7e5df\`（报告记录包版本 2.0.3）；
+- Base：\`openbmb/VoxCPM2\` 固定 snapshot \`32279effe8c19989596f05d353d1447f51d9e915\`；
+- LoRA lm=true、dit=true、proj=false、r=16、alpha=16、dropout=0；
+- 训练样本 127 条、~809.5 秒，effective batch 8、150 optimizer steps，约 1200 次样本曝光（相当于训练集 ~9.4 倍样本数；**不等于有效完成 9.4 个各不重复 epoch**）；
+- Step50/100/150 检查点已生成；训练验证损失记录为 step0=0.960、50=0.904、100=0.945、150=0.976，没有持续改善；
+- 已有人工 A/B：base vs step100 3:1，Step50 vs Step150 两对 TIE；不足以证明 LoRA 方案一定失败，也不足以自动批准继续训练。
+
+必须区分三种不同的结论：
+
+1. **没有成功加载权重 / 部分权重被跳过（实现错误）**；
+2. **LoRA 加载完整且有作用，但效果太弱、改变了情绪或自然度，没有形成主观收益（训练效果/目标问题）**；
+3. **测试链路不可比（例如 seed 未正确传递、不同推理实现或 Prompt 处理变化），旧 A/B 结论暂不可信**。
+
+每条结论必须附上可以复现的文件、日志和数字证据。不能从“WAV 的 SHA 不同”直接得出「LoRA 正确生效」；不同 seed、非确定性或模型加载行为也会令 SHA 不同。
+
+## 26.2 首先检查官方版本与加载接口
+
+先做**无需 GPU 或新生成**的静态审计：
+
+1. 确认实际推理 env 中安装的 \`voxcpm\` 包版本、源码文件位置及 commit。不要拿 GitHub 当前 main 的 API 代替本地 tag 2.0.3，尤其注意不同版本的 \`seed\` 接口可能不一致。
+2. 读取 \`scripts/eval_voxcpm_lora_env.py\`、\`workers/voxcpm_worker.py\`、官方 \`VoxCPM.from_pretrained\`、\`VoxCPM2Model.load_lora_weights\`、\`LoRAConfig\` 和 model \`_generate_with_prompt_cache\`，核对接口与代码实际执行路径。
+3. 检查官方加载器返回的 \`loaded_keys, skipped_keys\` 及其底层语义；是否出现名称错配、\`torch.compile\` 包装、模块前缀、dtype/device 复制、LoRA 实际未启用等问题。
+4. 比对 Step50/100/150 各自 \`lora_config.json\` 与训练实际配置、base architecture、权重文件哈希。确认 \`enable_lm/enable_dit/r/alpha\` 一致。
+5. 审核实际训练/推理是否用了不同 \`seed\` 传递机制：\`torch.manual_seed\` / \`cuda.manual_seed_all\` 与官方 \`generate(seed=...)\` 的可用性必须按**已安装版本**判断，若版本不支持 seed 参数，说明采取何种 RNG 固定方式，不准静默改动依赖版本。
+6. 静态检查 \`normalize=True\`、\`denoise=False\`、\`cfg_value=2.0\`、\`inference_timesteps=10\`、\`retry_badcase=True\`、P0 音频/文本、参考 SHA256 是否与冻结的 Phase 5B 完全一致。
+
+**优先采用薄的诊断工具或包装日志，避免修改官方 VoxCPM 源码。** 对需验证加载键的场景，允许在诊断脚本里显式构造对应 \`LoRAConfig\`、调用官方 \`load_lora_weights\` 并记录返回值；不能只依靠模型启动成功或打印了 \`Loading LoRA weights\` 判定成功。
+
+## 26.3 权重文件结构与实际训练更新证据
+
+对 step50、100、150 各做静态 safetensors（或官方 ckpt 格式）审计：
+
+- 列出权重张量个数、总元素数、trainable LoRA 层的实际覆盖（LM/DiT）、参数 key 的规范名；
+- 检查无 NaN/Inf，dtype、shape 与模型对应参数一致；
+- 统计 LM 和 DiT 两部分各自的 \`lora_A\`/\`lora_B\` 参数量、L2 norm、非零比例及 A/B 矩阵的变化；
+- 分别比较 step50→100、100→150 的参数差异、相对范数变化，区分实际更新与仅文件 metadata/hashes 变化；
+- 以**初始化 LoRA 的结构/初值特点**解释非零 B 矩阵的意义；B 非零仅是必要佐证，不足以单独证明每个前向分支参与结果；
+- 校验 checkpoint 是否存在重复/缺失、参数全零或不同 step 意外相同、LM 或 DiT 缺少权重。
+
+输出带分组的表，不能只给一个“weights differ”。
+
+## 26.4 加载完整性必须通过的验收
+
+以现有推理环境单独启动 VoxCPM2，固定加载 step100，并记录：
+
+- \`loaded_keys\` 总数、LM/DiT 分布；
+- \`skipped_keys\` 总数、具体键名及预期/实际 shape；
+- checkpoint 中所有 LoRA keys 与模型中 LoRA 模块键的匹配结果；
+- 运行时实际 \`lora_config\`、每组模块的 enable 状态；
+- LoRA A/B 权重在 load 前后的校验值（可比较 tensor hash/Norm，禁止把模型全部权重 dump 到 Git）；
+- checkpoint 文件 SHA256、model revision 和真实依赖版本。
+
+验收原则：
+
+1. 必须 **loaded_keys > 0**，且 LM/DiT 两类预期权重均被加载；
+2. 对 checkpoint 中应参与推理的 LoRA key，必须 **0 个无合理解释的 skipped/missing/unexpected key**。如果有任何异常，列出具体键名、原因；严重时记为 \`ADAPTER_LOAD_FAILED\`，**暂停听感推断**；
+3. 不能仅通过返回值数量判断 shape 正确/推理开启，还必须检查 LoRA 模块当前 enabled 状态与非零更新；
+4. 如果 API 不暴露足够信息，允许只在诊断脚本中为加载器加观测包装，不可在业务路径里吞掉异常或假定成功。
+
+如果找到明确 bug，**只修 adapter 加载/评测代码与对应测试**；修复后仅重生成必要的 1–2 条验证 WAV。不能自动重新训练。
+
+## 26.5 最小开关实验：同模型内 ON / OFF / Base
+
+选择唯一固定短句 \`short_response = 开伞，由我来动手。\`，统一 **P0** 及 seed42、固定已使用的 generation 参数。
+
+建议最小条件：
+
+| Condition | LoRA 模块结构 | checkpoint | LoRA enabled | 目标 |
+|---|---|---|---|---|
+| A | 原生 Base | 无 | 无 | 冻结 base 参考 |
+| B | 加载 step100 的相同模型 | step100 | false | 检验关闭 LoRA 是否回归 base |
+| C | 与 B 同一实例 | step100 | true | 验证真正由 LoRA 引起的改动 |
+| C-repeat | 与 C 相同模型/参数/seed | step100 | true | 检查可重复性 |
+
+**实验设计细则：**
+
+- 尽可能在同一个已经加载 step100 的模型实例内切换 \`set_lora_enabled(false/true)\`；模型初始化和优化路径差异要记录；
+- 可借助现成的 \`VoxCPM2Model.set_lora_enabled\`；如果当前已安装版本功能不同，不得私自假设其行为；
+- 固定生成请求前的 RNG；若 pinned API 不支持显式 \`seed\`，仅用明确记录的 \`torch.manual_seed(seed)\` 与 \`cuda.manual_seed_all(seed)\`，并把这个限制写进报告；
+- 使用同一 \`prompt_text\`、\`prompt_wav\`、\`normalize\`、\`cfg\`、\`inference_timesteps\`、\`retry_badcase\`、音频写入 dtype 和推理设备；
+- 若 C 与 C-repeat 不是足够接近：先检查编译算子/重试/RNG/生成路径的非确定性，**不要解释差异为 LoRA 效果**；
+- 比较 A vs B：应在已验证可复现容差下接近（否则先排查 adapter disabling、LoRA 架构及不同初始化环境）；
+- 比较 B vs C：在加载完整的前提下应存在可重复、非数值噪声级的差异，记录波形差异、持续时间和可选的 voiced-frame 频谱差异；若高度不稳定则标 \`INCONCLUSIVE\`；
+- 只以开关对照证明 LoRA 在计算图中实际影响输出，**不以波形差异大小作为音质更好或更差的证据**；
+- 对 A/B/C/C-repeat 产生的文件记录真实 SHA、运行参数、checkpoint SHA 和重试信息；不得把 checkpoint100 的输出与不同采样设置的历史样本硬拼比较。
+
+**推理新增 WAV 建议 4 条，硬上限 6 条**，不得追加多文本、多 seed 的试听 sweep；如果静态/加载检查已证明严重 bug，可只留下失败证据，停止生成。
+
+## 26.6 旧 Phase 5B A/B 的可比性复核
+
+确认 Phase 5B 的 6 个 base WAV 和 18 个 LoRA WAV 使用同一个：
+- 固定 snapshot / 同一个官方推理版本（不是只看 PyPI 版本号）；
+- P0 wav/text SHA；
+- text、seed 或明确等价的随机数固定机制；
+- output 音频原始格式；
+- cfg、timesteps、normalize、denoise、retry；
+- 同等 \`torch.compile\` / 推理 dtype 条件，或清晰记录不一致的地方。
+
+重新核对本地 **WAV 实际 SHA256** 与之前 manifest；按现有机制检查复用 base 没有被悄悄覆盖。对无法核实的字段标 \`UNVERIFIED\`，不宣布“公平”。
+
+特别记录：官方 \`seed\` 参数在 tag 2.0.3 与后续版本可能不同；未明确固定 RNG 的历史同-seed对照不能在报告中无条件宣称完美一致。
+
+若发现影响核心结论的不可比性，旧人工选择保留为事实，但标 \`COMPARABILITY_LIMITED\`，而不是修改用户历史评分。修复后仅允许做 1–2 条最必要的 A/B 回归，不自动扩充试听集。
+
+## 26.7 完成判定、后续策略及停止条件
+
+报告最后必须把 LoRA pilot 归入其中一种：
+
+- \`ADAPTER_NOT_EFFECTIVE\`：加载不完整、未启用、输出对照无法证明作用；列出根因/补丁及尚未解决项；
+- \`ADAPTER_EFFECTIVE_NO_CLEAR_GAIN\`：加载、启用、控制实验和历史可比性均通过，但既有用户 A/B **没有观察到明确优势**，保留 base；
+- \`COMPARABILITY_LIMITED\`：推理种子/条件/运行路径或可重复性不足以解释旧评测；先修证据，暂不对训练效果下强结论；
+- \`INCONCLUSIVE\`：环境/数据/checkpoint 缺失或验证不充分，明确缺口。
+
+无论哪一种，**不继续训练、不更换生产默认、不替用户决定 LoRA 胜出**。
+
+同时在报告中给出：
+- 是否建议**结束此次 LoRA pilot 并保留 Zero-shot**；
+- 如果继续研究，应优先查数据代表性、训练目标、微调引导下的韵律漂移还是 LoRA 覆盖模块，而不是盲目加到 500/1000 steps；
+- 验证集仅 8 条，val loss 0.904→0.945→0.976 不应被当作过拟合定论，低成本检查与数据统计优先。
+
+## 26.8 交付物和 Devin 执行次序
+
+提交到 \`tts/main\`：
+
+1. \`scripts/audit_voxcpm_lora_effect.py\`：最小、可复现、只读 checkpoint + 按需推理验证；脚本不得训练或修改生产模型；
+2. \`docs/reports/suoming-voxcpm-lora-effect-audit-v1.md\`：版本、载入键、权重差异、A/B/C-repeat 开关验证、旧 A/B 的可比性、结论枚举、可复现命令；
+3. 必要时补 \`tests/test_lora_effect_audit.py\` 与局部评测代码修正；需 mock coverage：missing/skipped keys、未生效、开关/seed 控制、hash 不一致、非确定性标记；
+4. 本地 \`outputs/diagnostics/suoming_voxcpm_lora_effect_v1/\` 保存日志、manifest.json、weights_metrics.json、最少量 WAV；这些都不提交权重/真实音频到普通 Git；
+5. 必要时在 Phase 5B 原报告**附录**补上审计结论链接；不要覆盖 150-step 原训练结果和主观评分。
+
+顺序：
+
+1. 拉 \`main\`，确认 \`ed40003\` 和 \`1bc846c\` 已在历史；第 25 节已完成，只执行第 26 节；
+2. 先离线核对 tag 2.0.3 加载机制、checkpoint key、训练变化和审计规则；
+3. 如加载可用，再做最小 ON/OFF 控制推理（最多 6 条新 WAV）；
+4. 验证 Phase 5B 历史推理条件、WAV hash、人工评分关联；
+5. 跑单元测试，写清已证实的结论/证据缺口，提交 GitHub；
+6. **立即停止，不启动新的 LoRA/SFT 训练，不要求用户补听 pack3。**
+
+禁止：训练任何模型、增加训练步数或 rank/LR sweep、重跑 Phase5B 全部 24 条音频、重新评分/伪造人耳感知结果、升级生产默认 checkpoint、把仅由数值差异得到的结论称为音质改善、修改旧 dotstts 项目。
+
+网络规则保持 **本地缓存 → 镜像 → 镜像失败才经 127.0.0.1:7897 代理**；无需下载时完全离线执行。
