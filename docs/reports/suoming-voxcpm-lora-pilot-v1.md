@@ -1,8 +1,10 @@
 # Phase 5B — VoxCPM2 LoRA 小规模可行性试验（Pilot v1）
 
 日期：2026-10-08 · 实验 ID：`suoming_voxcpm_lora_pilot_v1`
-状态：**`PENDING_USER_DECISION`** — 用户已盲听 6/20 对（两个关键 pack），
-方向倾向 `PILOT_NO_CLEAR_GAIN`，正式结论待用户确认是否补听 pack3
+状态：**`PILOT_NO_CLEAR_GAIN`（用户已决定，2026-10-08）** — 盲听
+6/20 对 base 3:1 无清晰增益；Phase 5C 审计证明 adapter 加载/生效/
+可比性全部成立；长篇台本《睡眠》复听后用户确认 **zero-shot 更好**，
+pilot 关闭，adapter 不升级，zero-shot 继续作为生产默认。
 
 ## 结论先行
 
@@ -144,12 +146,11 @@ step50 vs step150 不可分辨。与 ASR 辅助结果一致（无随 step 单调
 样本量为计划下限（6 对），方向倾向 `PILOT_NO_CLEAR_GAIN`，
 但正式结论尊重用户决定是否补听 pack3。
 
-## 待用户决定
+## 用户决定（已定）
 
-1. （可选）补听 pack3 剩余 14 对，或直接接受当前 6 对读数；
-2. 确认结论：`PILOT_NO_CLEAR_GAIN`（保留 zero-shot，LoRA 路线存档）
-   或 `PILOT_PROMISING`（再谈扩数据/步数，仍需用户授权）；
-3. 未授权前生产默认仍是 base zero-shot，adapter 不升级。
+`PILOT_NO_CLEAR_GAIN`：用户在长台本试听中确认 zero-shot 优于三个
+LoRA checkpoint，pilot 关闭；adapter 保留在本地 `outputs/training/`
+存档，不进入生产，不重训。生产默认 = base zero-shot（P0）。
 
 ## 产物（本地，全部 gitignored）
 

@@ -2,8 +2,13 @@
 
 日期：2026-10-08 · 审计 ID：`suoming_voxcpm_lora_effect_v1`
 最终判定：**`ADAPTER_EFFECTIVE_NO_CLEAR_GAIN`** —— LoRA 确实被完整加载、
-真实生效且可复现；Phase 5B 的对照条件可比性全部通过；但既有用户 A/B
+真实生效且可复现；Phase 5B 的对照条件可比性全部通过；既有用户 A/B
 （base 3:1，无清晰增益）维持有效 → **保留 zero-shot，不升级 adapter**。
+
+**用户决定（2026-10-08）**：对长篇台本《睡眠》（1379 字）补做了同台本
+试听（zero-shot vs step50/100/150，同 seed/P0/参数），用户判定
+**zero-shot 更好**。本次 LoRA pilot 正式关闭为 `PILOT_NO_CLEAR_GAIN`；
+adapter 权重仅存档于本地 `outputs/training/`（不入 git），不进入生产。
 
 ## 证据链（每条均可复现）
 
