@@ -8,13 +8,14 @@
 
 ---
 
-## 当前执行状态与优先任务（2026-10-08）
+## 当前执行状态与优先任务（2026-10-08，Phase 5A2）
 
 - **Phase 0–4：已由 Devin 实施并提交**，以 `docs/reports/suoming-backend-gate-v1.md` 和当前 `main` 为基线；不要重新搭平台、不要重新安装所有模型、不要重跑与本轮无关的全量 Gate。
 - 已有用户盲听评分已回填报告。VoxCPM2 **zero-shot 清澈度/磨砂改善/角色相似度/自然度 = 5/5/5/3**；但 VoxCPM2 **Codec roundtrip = 1/1/4/5**。此冲突需要诊断，不能以 zero-shot 一条高分直接宣布训练准入。
-- **本轮唯一执行目标：Phase 5A — VoxCPM2 小样本复现、Codec 异常排查、Prompt A/B 与训练决策报告**，详见第 23 节。优先复用本地环境与模型，不开展 LoRA/SFT。
+- **Phase 5A 已完成且用户已评分**：以 commit `d4c76d6`、`docs/reports/suoming-voxcpm-phase5a.md`、`docs/reports/suoming-voxcpm-phase5a-ratings.json` 为不可覆写基线。Codec 重建低分已有证据支持 AudioVAE 重建局限；无需重跑 Codec。
+- **本轮唯一执行目标：Phase 5A2 — P2 短句稳定性与重复评分一致性复核**，详见第 24 节。最多补 10 条新的 VoxCPM2 zero-shot WAV，使用已有环境与权重，仍不开展 LoRA/SFT。
 - Dots 和 Qwen3-TTS 继续作为既有 baseline；不得因此删除后端、改动旧 `dotstts` 仓库或重构通用架构。
-- 有效命令：Devin 拉取 `main` 后按第 23 节执行，完成后提交诊断代码、报告与脱敏评分元数据，**停在用户训练决策门前**。
+- 有效命令：Devin 拉取 `main` 后**只执行第 24 节 Phase 5A2**；不要重复 Phase 5A 或 Phase 0–4。提交新实验代码、报告、试听页与 SHA256 清单，**停在用户训练决策门前**。
 
 ---
 
@@ -857,7 +858,9 @@ python -m pytest
 
 ## Phase 5 — 用户试听与单后端验证
 
-**Phase 5A（当前允许执行）**：仅验证 VoxCPM2 的音质可重复性、Codec roundtrip 低分原因、不同参考音频对自然度的影响；详见第 23 节。
+**Phase 5A（已完成）**：VoxCPM2 多 seed、Codec 归因、P0/P1/P2 对照及人工评分已完成；以 `d4c76d6` 报告为历史基线，不能重新跑后覆盖。
+
+**Phase 5A2（当前允许执行）**：仅完成 P2 与 P0 的双短句、多 seed 比较，以及中长句 seed44 的 P2 对照和评分一致性诊断；详见第 24 节。
 
 **Phase 5B（当前禁止执行）**：训练方案设计/小规模 LoRA/SFT 或 checkpoint 对比。必须在 Phase 5A 报告交付、用户确认后另行授权。当前即使存在 5/5/5/3 的 zero-shot 高分，也不构成训练许可。
 
@@ -1011,7 +1014,7 @@ Devin 完成本计划 Phase 0–4 后，至少提交：
 2. 阅读完整 `PLAN.md`；
 3. 检查本机旧 `dotstts` 路径和已有模型/cache；
 4. 优先复用本地 cache，避免重复下载；
-5. 若 Phase 0–4 已在 Git 历史中完成，则**直接执行第 23 节的 Phase 5A**，不得为了“按计划”重复全部 Phase 0–4；
+5. Phase 0–4、5A 已完成，本轮**只执行第 24 节 Phase 5A2**；不得重复历史实验或覆盖旧评价；
 6. 每个 Phase 完成后先测试再继续；
 7. 发现模型/API 与计划假设不一致时，以官方实际接口为准，但保持架构边界；
 8. 不因单一 backend 阻塞整个任务：记录 BLOCKED 后继续其他 backend；
@@ -1024,7 +1027,7 @@ Devin 完成本计划 Phase 0–4 后，至少提交：
    - BLOCKED 项
    - 推荐下一步
 
-**当前轮次仅限 Phase 5A；不得开始任何 LoRA/SFT 训练。**
+**当前轮次仅限 Phase 5A2；不得开始任何 LoRA/SFT 训练。**
 
 
 ---
@@ -1223,3 +1226,116 @@ Devin 完成本计划 Phase 0–4 后，至少提交：
 8. **停止在用户听评与训练决策门前**，不启动微调、不扩展新后端。
 
 网络仍遵守：**本地缓存 → 可用镜像 → 镜像失败后 127.0.0.1:7897 代理**；代理仅限相关进程，勿修改全局设置。
+
+
+---
+
+# 24. Phase 5A2 — VoxCPM2 P2 短句稳定性及评分一致性复核（当前唯一执行任务）
+
+> 状态：**ACTIVE**（2026-10-08）。Phase 5A 的报告/评分/音频及其 hash 是冻结基线，不再重复第 23 节。目的是用最小样本回答“P2 的两条全 5 分能否推广至短句和不利 seed”，而不是刷 Prompt、堆后处理或直接开训。
+
+## 24.1 冻结证据与未解问题
+
+历史有效资产：
+
+- Phase 5A 实施 commit：`270f109`；人工评分回填 commit：`d4c76d6`。
+- 原始总结：`docs/reports/suoming-voxcpm-phase5a.md`。
+- 用户评分：`docs/reports/suoming-voxcpm-phase5a-ratings.json`；已报告 22/22 评分记录与 manifest SHA 相符。
+- P0 = `configs/evaluations/suoming_voxcpm_phase5a.yaml` 里的 25s「谛天鉴」参考；P2 = 28s「回到华亭」参考。P1 已两文本自然度 2，本轮不参加。
+- Phase 5A：P2 × rain/mid_exposition × seed42，两句 c/g/l/n 均 5/5/5/5；**只覆盖 2 条文本、1 个 seed，尚未证明短句普适稳定**。
+- P0 下：`short_response` 的 seed42、43、44 分别为 1/1/3/5、5/5/3/3、4/4/2/1；`mid_exposition_seed44` 自然度 1。
+- **重复评分冲突**：`stability/rain_seed42` 与 `prompt_ab/P0_rain_seed42` 是同 SHA，却分别被评为 4/5/4/5 与 5/5/4/3；`mid_exposition_seed42` 在两组分别 5/5/5/5 与 5/5/5/4。相同音频在不同试听上下文中评分变化，属观察到的评测方差，**不能当成两个独立声学样本**。
+- Codec roundtrip 1/1 已按双原声/双解码条件排查为 `codec_reconstruction_limit_supported`，保留训练风险，不重做 Codec、更不因 zero-shot 高分而宣称 Codec 恢复。
+
+本轮只回答：
+
+1. P2 能否在**同一句短句**的不同 seed 中，比 P0 更稳定、自然且像角色？
+2. P2 的改善能否在**第二条独立短句**重现，而非只在一条文本上碰运气？
+3. 对已有自然度 1 的 `mid_exposition_seed44`，换成 P2 是否改善？
+4. 对同 SHA 不同分数，评测应如何保留上下文差异、避免重复样本权重？
+
+## 24.2 严格受控实验矩阵（新增 WAV 上限 = 10）
+
+| 组 | 文本 | Prompt | seed | 既有 WAV 复用 | 需新增 |
+|---|---|---|---|---|---:|
+| A | `short_response`（「开伞，由我来动手。」） | P0 | 42、43、44 | Phase 5A stability 3 条 | 0 |
+| A | 同上 | P2 | 42、43、44 | 无 | 3 |
+| B | 第二条独立短句 `short_response_2` | P0 | 42、43、44 | 无 | 3 |
+| B | 同上 | P2 | 42、43、44 | 无 | 3 |
+| C | `mid_exposition` | P0 | 44 | Phase 5A stability 1 条 | 0 |
+| C | 同上 | P2 | 44 | 无 | 1 |
+| **合计** | **2 条短句 + 1 条长句异常复核** | | | **4 条可复用** | **10 条新增** |
+
+第二短句选择规则：
+
+- 从**未用作 P0/P2 参考语音**的锁暝 validation/test 中选一条语义完整、简短且不同于「开伞」的台词；建议 6–20 汉字左右，避免单独的语气词；记录真实 `text`、split、源 manifest、若有录音则校验 SHA。
+- 如果 held-out 中没有合适短句，可使用**人工明确新写的测试短句**，标记 `unseen_new_text`；禁止假称有真实录音/准确 ground truth。
+- 不得把测试目标原声作为同次语音克隆的 Prompt，不允许文本泄漏。
+- 不许因为某条比较差就替换文本或增跑 seed。若确需扩大预算，先交报告说明并停止。
+
+**只变更 Prompt。** 固定 VoxCPM2 revision `32279effe8c19989596f05d353d1447f51d9e915`、已安装 voxcpm 2.0.3、采样方式、环境、cfg、inference steps、dtype、text、seed 等；参数原则上与 Phase 5A 相同：`cfg_value=2.0`、`inference_timesteps=10`、`normalize=True`、`denoise=False`、`retry_badcase=True`。记录真实 retry 次数；不能只根据 WAV 可读就说稳定。
+
+注意 P0、P2 是**不同内容、不同长度的完整 Prompt 条件**；本次可验证“整个 Prompt 选项的效果”，不能把改善单独归因于长度、语速或文本某一项。
+
+## 24.3 原文件复用与公平盲听
+
+1. **在新目录运行**：`outputs/gates/suoming_voxcpm_phase5a2/`；现有 `suoming_voxcpm_phase5a` 只读。不得重命名、覆盖既有 WAV 或覆盖已导出的旧用户评分。
+2. 对所有复用的四条 WAV，必须检查**磁盘实际文件 SHA256** 与旧 manifest 相符；同时校验同一 model revision、Prompt SHA、文本、seed、effective options、backend 版本。缺文件、hash 不匹配或参数不一致时标 `BLOCKED_REUSE`，**不能悄悄以新音频替代旧基线**；向报告写出如何恢复原始资产。
+3. 对十条新增 WAV，记录 `case_id`、输入/输出 SHA、生成时长、sample rate、模型及 Python 包版本、实际 options、重试情况、生成耗时、wav sanity（长度/NaN/静音/削波）。输出成功需要本轮新的 sidecar 与真实 WAV hash，不可仅靠“路径上已经存在 WAV”判断。
+4. 不对音频做 EQ、后期降噪、响度美化、改速、增混响、频谱稳定器、训练/权重修改。可以给盲听生成统一**播放响度**的额外副本，但保留 raw，并在评分标签里明确区分。
+5. 试听页面按**同一文本配对 P0/P2**，不暴露型号/Prompt 身份的盲听标签；同一对尽量随机化左右位置，支持解盲、用户保存 1–5 四维评分及完整性/失真备注。
+6. 评分导出绑定 `experiment_id + case_id + real_output_sha256`。**相同 SHA 的 WAV 在本实验只计一次音质证据**；旧 Phase 5A 里同 SHA 的评分差异要作为 `context_variance` 案例保存，不以平均后的数字掩盖，也不当独立样本加权。针对 P0/P2 可给出每句配对分数与例外说明，而不是做一个不可信的综合分。
+
+## 24.4 文字完整性与异常分类
+
+重点是先定位问题属于哪类，不能笼统标“坏句”：
+
+- 文本：是否漏字、错字、重复、额外插话、句尾截断；
+- 发音与声学：齿音/磨砂、幼态前顶、口型过大/空腔回声、声音粗糙或突变；
+- 韵律：语速过快/过慢、停顿错误、重音不自然、尾音衰减、明显失真；
+- 音色：是否保持锁暝声线、同文本 seed 之间漂移；
+- 可用性：本地 raw 录音是否可读、是否完整、重试是否真实发生。
+
+若环境已有可用中文 ASR，可用转写/CER 做**辅助证据**，并保留具体逐字 diff；否则试听页提供 `text_complete = yes/no/uncertain` 和 `transcription_notes`，交用户逐字判定，不能凭 WAV 时长宣称没有漏字。
+
+特别把 `short_response_seed42` 的 1/1 声学异常和 `mid_exposition_seed44` 的自然度 1 拆分分析；**不能把不同缺陷混为同一种采样失败**。Agent 无听觉评分证据时，所有主观项目保持 `PENDING_USER_LISTENING`。
+
+## 24.5 判定规则（先定义，再听结果）
+
+比较的主要单位是**同文本、同 seed、P0 对 P2 配对**，共 7 组，其中 6 组短句、1 组长句。
+
+- 若 **P2 在 6 对短句中多数提高自然度与角色相似度，且不明显损失清澈度/磨砂改善**，并且未出现新的严重文本/声学失败，可建议把 P2 设为后续 LoRA 的 **candidate reference baseline**。
+- 若 P2 对长句 seed44 也改善，增强其泛化证据；若未改善，明确记录 seed 或文本特异性，不能整体宣传“已修复”。
+- 若 P2 的短句失败率仍高、尤其再次出现清澈度/磨砂 1 分或自然度 1 分，结论为需要先解决稳定性或评估训练风险，不得从现有两句 5/5 推断稳健。
+- 上述“多数”是**实验阶段预注册的建议性门槛而非统计显著性**；只有两条短句与三个 seed，不能推断生产长期故障率。
+- Codec roundtrip 局限是单独维度，**本轮不重开 Codec，也不因 P2 通过就自动批准忽略 Codec 训练风险**。
+- 训练决策三选一：`RECOMMEND_PHASE5B_LORA_PLAN`、`MORE_EVIDENCE_NEEDED`、`DO_NOT_TRAIN_YET`。即便推荐 Phase 5B，含义也只是**建议用户审核小规模训练方案**，本轮禁止真的启动训练。
+- P2 只标记 `candidate`；不修改 `configs/characters/suoming.yaml` 的生产默认参考，也不改变日常 WebUI 默认行为，直到用户明确批准。
+
+## 24.6 代码与交付范围
+
+优先**复用**既有 `src/character_tts/evaluation/phase5a.py`、统一 worker、listen page、manifest、哈希校验和评分导出工具，不要复制成另一个巨大框架。合理新增：
+
+- `configs/evaluations/suoming_voxcpm_phase5a2.yaml`：实验矩阵与版本/Prompt hash；
+- `scripts/run_voxcpm_phase5a2.py`：轻量入口（也可合理扩展现有 CLI）；
+- `docs/reports/suoming-voxcpm-phase5a2.md`：7 对配对样本表、逐条异常分类、P2 是否具有跨句改善证据、主观待审项和训练建议；
+- `outputs/gates/suoming_voxcpm_phase5a2/manifest.json`、`listen/index.html`、`unblind_map.json`、sidecars、真实 WAV（本地，不进普通 Git）；
+- 对复用哈希、真实 WAV 校验、重复 SHA 去重、配对 case 数量、`text_complete` 记录、输出路径隔离的单元测试。
+
+报告必须列出：复用 4 条与新生成最多 10 条的明细、实际完成/失败数、每 case hash 与 retry、旧评分同 SHA 不一致说明、完整性检查状态、盲听入口、`PENDING_USER_LISTENING`（未评分时）以及 `PENDING_USER_DECISION`。
+
+**不要把“运行成功”写成“音质通过”；不要杜撰用户评分；不要因缺 WAV 自动把当前轮所有基线重跑。**
+
+## 24.7 停止规则及 Devin 执行顺序
+
+1. `git pull` 最新 main；读取本第 24 节、Phase 5A 报告和评分 JSON。
+2. 查本地模型、cache、旧 WAV/manifest，确定有 4 个可复用样本。旧文件不可获得则记录阻塞，不伪造数据。
+3. 选并冻结第二短句；登记真实来源/文本/哈希，确认与 P0/P2 非同一句。
+4. 实现最小差异的 7 配对用例与试听展示（严格不超过 10 条新增）。
+5. 执行、核验文件级 SHA256、保存全部坏句、生成诊断 report。
+6. 跑已有 tests 和新测试，提交 GitHub；原生产配置及旧 Phase 5A 不变。
+7. **停止，等待用户对本轮试听样本评分和是否推进 Phase 5B 的决定。**
+
+本轮不可：训练 VoxCPM2 / Qwen / Dots、新增后端、优化 Codec、无限扫 seed、重做 Phase 0–5A、套用 EQ 修好听感、修改生产默认 Prompt。
+
+下载规则不变：**本地 cache → 镜像优先 → 镜像失败再走 `127.0.0.1:7897`**。不得修改全局代理。
