@@ -16,16 +16,34 @@
 ## 结论
 
 三个后端全部通过 codec roundtrip 与 zero-shot 机检门（7/7 cases ok）。
-**主观音质与"是否进入训练"均保持 `PENDING_USER_LISTENING`，等待人工试听。**
-按 PLAN.md 约束，本报告不以任何客观指标宣布胜负。
+用户已完成盲听（`listen/listen-ratings.json`，1–5 越低越差，如实回填
+见下表）。**"是否进入训练"保持 `PENDING_USER_DECISION`——听完了，
+但是否训练由用户决定，平台不自动宣布胜负。**
 
-| Backend | Env | Codec roundtrip | Zero-shot | 主观评分 | 建议训练 |
+| Backend | Env | Codec roundtrip | Zero-shot | 主观评分(用户 c/g/l/n) | 建议训练 |
 |---|---|---|---|---|---|
-| dots_legacy (LoRA step500 基线) | yes | ok (41.6s, 确定性) | ok (20.3s) | PENDING_USER_LISTENING | PENDING_USER_LISTENING |
-| voxcpm2 | yes | ok (0.1s) | ok (27.7s) | PENDING_USER_LISTENING | PENDING_USER_LISTENING |
-| qwen3_tts | yes | ok (4.5s) | ok (23.6s) | PENDING_USER_LISTENING | PENDING_USER_LISTENING |
+| dots_legacy (LoRA step500 基线) | yes | ok (41.6s, 确定性) | ok (20.3s) | codec 3/3/4/5 · zs 5/5/1/2 · lora 5/5/2/2 | PENDING_USER_DECISION |
+| voxcpm2 | yes | ok (0.1s) | ok (27.7s) | codec 1/1/4/5 · zs 5/5/5/3 | PENDING_USER_DECISION |
+| qwen3_tts | yes | ok (4.5s) | ok (23.6s) | codec 1/1/4/5 · zs 1/4/3/3 | PENDING_USER_DECISION |
 
 dots_legacy 另完成 `generate`（已训练 LoRA 路径）ok (5.4s)。
+
+### 用户盲听全量评分（来自 listen/listen-ratings.json）
+
+| Sample | 清澈度 | 磨砂/颗粒 | 像角色 | 自然度 |
+|---|---|---|---|---|
+| ground_truth_original（原声） | 3 | 3 | 4 | 5 |
+| reference_original（克隆参考） | 5 | 5 | 5 | 5 |
+| dots codec roundtrip | 3 | 3 | 4 | 5 |
+| dots LoRA generate | 5 | 5 | 2 | 2 |
+| dots zero-shot | 5 | 5 | 1 | 2 |
+| qwen3_tts codec roundtrip | 1 | 1 | 4 | 5 |
+| qwen3_tts zero-shot | 1 | 4 | 3 | 3 |
+| voxcpm2 codec roundtrip | 1 | 1 | 4 | 5 |
+| voxcpm2 zero-shot | 5 | 5 | 5 | 3 |
+
+维度含义：c=清澈度 g=磨砂/颗粒 l=像角色 n=自然度。用户备注：
+「得分越低越差」。
 
 ## v2 修复内容（Phase 0–4 审查）
 
@@ -97,11 +115,11 @@ localStorage，可导出 JSON）。排序：原声(validation) → 克隆参考 
 
 ## BLOCKED
 
-无 gate 阻塞项。`PENDING_USER_LISTENING` 是唯一待办。
+无 gate 阻塞项。
 
-## 下一步（需人工试听结论后）
+## 下一步
 
-1. 试听 `listen/index.html` 并导出评分 → 回填报告主观列。
-2. 仅当 codec+zero-shot 人耳通过后，才允许对对应后端启动 LoRA/SFT 方案
-   设计（PLAN.md 顺序约束）。
-3. 可选：补 SoX；扩展第二条 anchor text 做交叉验证。
+1. **用户决策**：基于上述盲听评分决定是否对某后端启动 LoRA/SFT
+   （PLAN.md 顺序约束——codec+zero-shot 已过机检，人耳结果已回填）。
+2. 可选：补 SoX；扩展第二条 anchor text 做交叉验证；
+   用户若改变结论可在试听页改分后重新导出，重跑 finalize 即回填。

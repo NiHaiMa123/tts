@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import Any
 
 PENDING = "PENDING_USER_LISTENING"
+PENDING_DECISION = "PENDING_USER_DECISION"
 
 _BACKENDS = ("dots_legacy", "voxcpm2", "qwen3_tts")
+_RATING_DIMS = ("clarity", "grit", "likeness", "naturalness")
 
 
 def _yes_no(value: bool | None) -> str:
@@ -17,6 +19,29 @@ def _yes_no(value: bool | None) -> str:
     if value is False:
         return "no"
     return "?"
+
+
+def _load_ratings(output_dir: Path) -> dict[str, dict[str, str]]:
+    """User-exported blind-listening ratings, if present."""
+    for cand in (output_dir / "listen" / "listen-ratings.json",
+                 output_dir / "listen-ratings.json"):
+        if cand.is_file():
+            try:
+                data = json.loads(cand.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            ratings = data.get("ratings")
+            return ratings if isinstance(ratings, dict) else {}
+    return {}
+
+
+def _score_cell(ratings: dict[str, dict[str, str]], rel: str) -> str:
+    """Compact c/g/l/n summary for one sample; '-' when unrated."""
+    r = ratings.get(rel) or {}
+    vals = [r.get(d) for d in _RATING_DIMS]
+    if not any(vals):
+        return "-"
+    return "c/g/l/n " + "/".join(v or "-" for v in vals)
 
 
 def write_report_md(output_dir: str | Path, report: dict[str, Any],
@@ -119,17 +144,57 @@ def write_report_md(output_dir: str | Path, report: dict[str, Any],
         seen.add(backend)
     lines.append("")
 
+    # -- subjective listening -----------------------------------------------------
+    ratings = _load_ratings(output_dir)
+    if ratings:
+        lines.append("### 主观试听（用户评分，1–5，越低越差）")
+        lines.append("")
+        lines.append(
+            "| Sample | 清澈度 | 磨砂/颗粒 | 像角色 | 自然度 | "
+            "稳定性 | 备注 |"
+        )
+        lines.append("|---|---|---|---|---|---|---|")
+        for rel in sorted(ratings, key=lambda k: ("/" in k, k)):
+            r = ratings[rel] or {}
+
+            def cell(dim: str) -> str:
+                v = r.get(dim)
+                return str(v) if v not in (None, "") else "-"
+            lines.append(
+                f"| `{rel}` | {cell('clarity')} | {cell('grit')} | "
+                f"{cell('likeness')} | {cell('naturalness')} | "
+                f"{cell('stability')} | {cell('notes')} |"
+            )
+        lines.append("")
+        lines.append(
+            "> 评分来自 `listen/listen-ratings.json`（用户盲听导出）。"
+            "平台如实展示，不自动宣布胜负。"
+        )
+        lines.append("")
+
     # -- gate table ---------------------------------------------------------------
     lines.append("### B. Gate 状态")
     lines.append("")
     lines.append(
-        "| Backend | Codec gate | Zero-shot gate | 主观评分 | 是否建议训练 |")
+        "| Backend | Codec gate | Zero-shot gate | 主观评分(用户) | 是否建议训练 |")
     lines.append("|---|---|---|---|---|")
+    case_outputs = {(c.get("backend"), c.get("kind")): c.get("output")
+                    for c in report.get("cases", [])}
     for backend in ordered:
         codec = case_status.get((backend, "codec_roundtrip"), "not_run")
         zero = case_status.get((backend, "zero_shot"), "not_run")
+        # Show the user's scores for the two gate samples when rated.
+        codec_r = _score_cell(
+            ratings, case_outputs.get((backend, "codec_roundtrip")) or "")
+        zero_r = _score_cell(
+            ratings, case_outputs.get((backend, "zero_shot")) or "")
+        if ratings:
+            subj = f"codec {codec_r}; zs {zero_r}"
+            train = PENDING_DECISION
+        else:
+            subj = train = PENDING
         lines.append(
-            f"| {backend} | {codec} | {zero} | {PENDING} | {PENDING} |"
+            f"| {backend} | {codec} | {zero} | {subj} | {train} |"
         )
     lines.append("")
 
