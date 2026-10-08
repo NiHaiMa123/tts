@@ -113,6 +113,29 @@ def handle(method, params):
         shutil.copy2(params["audio_path"], params["output_path"])
         return {"status": "ok", "sample_rate": 8000,
                 "output_path": params["output_path"]}
+    if method == "codec_probe":
+        if not os.environ.get("FAKE_ROUNDTRIP_OK"):
+            return {"status": "unsupported",
+                    "reason": "fake worker has no codec"}
+        import shutil
+        out_dir = params["output_dir"]
+        stem = params.get("stem") or "probe"
+        os.makedirs(out_dir, exist_ok=True)
+        artifacts = {}
+        enc_path = os.path.join(out_dir, f"{stem}_input16k.wav")
+        shutil.copy2(params["audio_path"], enc_path)
+        for v in params.get("variants") or ["default"]:
+            name = (f"{stem}_roundtrip48.wav" if v == "default"
+                    else f"{stem}_roundtrip_cond16k.wav")
+            p = os.path.join(out_dir, name)
+            shutil.copy2(params["audio_path"], p)
+            artifacts[v] = {"path": p}
+        return {"status": "ok", "encode_sample_rate": 16000,
+                "decode_sample_rate": 48000, "vae_dtype": "float32",
+                "vae_device": "cpu", "latent_shape": [1, 64, 10],
+                "latent_rate_hz": 25.0,
+                "encode_input": {"path": enc_path},
+                "artifacts": artifacts, "wall_seconds": 0.01}
     if method == "shutdown":
         return {"stopped": True}
     raise ValueError(f"unknown method {method}")

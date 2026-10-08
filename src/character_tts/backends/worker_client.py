@@ -148,6 +148,17 @@ class WorkerClient:
             timeout=timeout,
         )
 
+    def codec_probe(self, *, audio_path: str, output_dir: str,
+                    stem: str | None = None,
+                    variants: list[str] | None = None,
+                    timeout: float | None = None) -> dict[str, Any]:
+        return self.call(
+            protocol.METHOD_CODEC_PROBE,
+            {"audio_path": audio_path, "output_dir": output_dir,
+             "stem": stem, "variants": variants or ["default"]},
+            timeout=timeout,
+        )
+
     def shutdown(self, timeout: float | None = 10) -> dict[str, Any]:
         try:
             return self.call(protocol.METHOD_SHUTDOWN, timeout=timeout)

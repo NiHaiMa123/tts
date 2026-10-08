@@ -68,6 +68,8 @@ def _stft_mag(x: np.ndarray, sr: int, nperseg: int = 2048,
               hop: int = 512) -> tuple[np.ndarray, np.ndarray]:
     # No boundary/padding so frame count == 1 + (len - nperseg) // hop,
     # matching _voiced_frame_mask. Short inputs shrink nperseg to len.
+    nperseg = min(nperseg, len(x))
+    hop = min(hop, nperseg)
     freqs, _, z = signal.stft(
         x, fs=sr, nperseg=nperseg, noverlap=nperseg - hop,
         window="hann", padded=False, boundary=None,

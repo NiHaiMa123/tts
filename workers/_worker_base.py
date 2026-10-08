@@ -26,6 +26,7 @@ ALL_METHODS = (
     "capabilities",
     "generate",
     "codec_roundtrip",
+    "codec_probe",
     "shutdown",
 )
 

@@ -1,0 +1,92 @@
+{
+  "schema": "suoming_gate_v1_user_ratings/1",
+  "source": "outputs/gates/suoming_v1/listen/listen-ratings.json",
+  "source_type": "raw_export",
+  "exported_at": "2026-10-08T10:44:36.625Z",
+  "scale": {
+    "range": "1-5",
+    "direction": "higher_is_better",
+    "grit_semantics": "higher means LESS grit/scratchiness"
+  },
+  "dimensions": [
+    "clarity",
+    "grit",
+    "likeness",
+    "naturalness"
+  ],
+  "samples": [
+    {
+      "sample_id": "ground_truth/rain_anchor_original",
+      "sample_rel_path": "ground_truth_original.wav",
+      "clarity": "3",
+      "grit": "3",
+      "likeness": "4",
+      "naturalness": "5",
+      "notes": "得分越低越差"
+    },
+    {
+      "sample_id": "reference/ditianjian_prompt_original",
+      "sample_rel_path": "reference_original.wav",
+      "clarity": "5",
+      "grit": "5",
+      "likeness": "5",
+      "naturalness": "5"
+    },
+    {
+      "sample_id": "dots_legacy/codec_roundtrip",
+      "sample_rel_path": "dots/codec_roundtrip.wav",
+      "clarity": "3",
+      "grit": "3",
+      "likeness": "4",
+      "naturalness": "5"
+    },
+    {
+      "sample_id": "dots_legacy/lora_step500_generate",
+      "sample_rel_path": "dots/trained_or_lora.wav",
+      "clarity": "5",
+      "grit": "5",
+      "likeness": "2",
+      "naturalness": "2"
+    },
+    {
+      "sample_id": "dots_legacy/zero_shot",
+      "sample_rel_path": "dots/zero_shot.wav",
+      "clarity": "5",
+      "grit": "5",
+      "likeness": "1",
+      "naturalness": "2"
+    },
+    {
+      "sample_id": "qwen3_tts/codec_roundtrip",
+      "sample_rel_path": "qwen3_tts/codec_roundtrip.wav",
+      "clarity": "1",
+      "grit": "1",
+      "likeness": "4",
+      "naturalness": "5"
+    },
+    {
+      "sample_id": "qwen3_tts/zero_shot",
+      "sample_rel_path": "qwen3_tts/zero_shot.wav",
+      "clarity": "1",
+      "grit": "4",
+      "likeness": "3",
+      "naturalness": "3"
+    },
+    {
+      "sample_id": "voxcpm2/codec_roundtrip",
+      "sample_rel_path": "voxcpm2/codec_roundtrip.wav",
+      "clarity": "1",
+      "grit": "1",
+      "likeness": "4",
+      "naturalness": "5"
+    },
+    {
+      "sample_id": "voxcpm2/zero_shot",
+      "sample_rel_path": "voxcpm2/zero_shot.wav",
+      "clarity": "5",
+      "grit": "5",
+      "likeness": "5",
+      "naturalness": "3"
+    }
+  ]
+}

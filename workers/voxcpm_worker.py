@@ -162,9 +162,17 @@ class VoxCPMWorker(WorkerServer):
         output_path = Path(params["output_path"])
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # voxcpm logs "Badcase detected" to stderr when retry_badcase
+        # re-rolls a bad generation; capture it so we can report the real
+        # retry count instead of claiming first-pass success.
+        import contextlib
+        import io
+        errbuf = io.StringIO()
         t0 = time.monotonic()
-        wav = model.generate(**call_kwargs)
+        with contextlib.redirect_stderr(errbuf):
+            wav = model.generate(**call_kwargs)
         wall = time.monotonic() - t0
+        retry_count = errbuf.getvalue().count("Badcase detected")
 
         sr = int(getattr(getattr(model, "tts_model", model), "sample_rate",
                          getattr(model, "sample_rate", 48000)))
@@ -175,7 +183,13 @@ class VoxCPMWorker(WorkerServer):
             "duration": float(len(wav_np) / sr),
             "output_path": str(output_path),
             "wall_seconds": wall,
-            "metadata": {"seed": seed, "generation": call_kwargs},
+            "metadata": {
+                "seed": seed,
+                "generation": call_kwargs,
+                "retry_badcase_enabled": bool(call_kwargs.get(
+                    "retry_badcase", True)),
+                "retry_count": retry_count,
+            },
         }
 
     def handle_codec_roundtrip(self, params: dict) -> dict:
@@ -230,6 +244,118 @@ class VoxCPMWorker(WorkerServer):
             "output_path": str(output_path),
             "wall_seconds": wall,
             "metadata": {"codec": "AudioVAE V2 (asymmetric 16k->48k)"},
+        }
+
+    def handle_codec_probe(self, params: dict) -> dict:
+        """Diagnostic codec probe (Phase 5A).
+
+        Emits intermediate artifacts so the host can attribute artifacts:
+          - ``<stem>_input16k.wav``: the exact resampled signal fed to the
+            encoder (the information ceiling for the roundtrip).
+          - ``<stem>_roundtrip48.wav``: encode -> decode(default sr_cond).
+          - ``<stem>_roundtrip_cond16000.wav`` (variant ``cond16000``):
+            same latents decoded with ``sr_cond=16000`` to isolate the
+            decoder's HF resynthesis contribution.
+
+        Also returns the latent tensor shape, VAE dtype/device and the
+        decoded output length so host-side analysis can check alignment.
+        """
+        import hashlib
+        import numpy as np
+        import soundfile as sf
+        import torch
+
+        model = self._load()
+        tts_model = getattr(model, "tts_model", model)
+        vae = getattr(tts_model, "audio_vae", None)
+        encode = getattr(vae, "encode", None) if vae is not None else None
+        decode = getattr(vae, "decode", None) if vae is not None else None
+        if vae is None or not callable(encode) or not callable(decode):
+            return {
+                "status": "unsupported",
+                "reason": "installed voxcpm does not expose an audio "
+                          "encode/decode API on the loaded model",
+            }
+
+        audio_path = Path(params["audio_path"])
+        out_dir = Path(params["output_dir"])
+        stem = params.get("stem") or audio_path.stem
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        data, sr = sf.read(str(audio_path), dtype="float32", always_2d=True)
+        wav = torch.from_numpy(data.mean(axis=1)).float()
+        in_sr = int(getattr(vae, "sample_rate", 16000))
+        if sr != in_sr:
+            import torchaudio
+            wav = torchaudio.functional.resample(wav, sr, in_sr)
+
+        input16k_path = out_dir / f"{stem}_input{in_sr // 1000}k.wav"
+        sf.write(str(input16k_path), wav.numpy(), in_sr)
+
+        device = next(tts_model.parameters()).device
+        wav_dev = wav.to(device).unsqueeze(0).unsqueeze(0)  # [B,1,T]
+
+        t0 = time.monotonic()
+        with torch.inference_mode():
+            lat = encode(wav_dev, in_sr)
+            variants = list(params.get("variants") or ["default"])
+            artifacts = {}
+            for variant in variants:
+                if variant == "default":
+                    recon = decode(lat)
+                    name = f"{stem}_roundtrip48.wav"
+                elif variant == "cond16000":
+                    sr_cond = torch.tensor([16000], device=lat.device,
+                                           dtype=torch.int32)
+                    recon = decode(lat, sr_cond)
+                    name = f"{stem}_roundtrip_cond16k.wav"
+                else:
+                    continue
+                if isinstance(recon, dict):
+                    recon = recon.get("audio", next(iter(recon.values())))
+                elif isinstance(recon, (tuple, list)):
+                    recon = recon[0]
+                recon_np = np.asarray(
+                    recon.float().cpu().squeeze().numpy(), dtype=np.float32)
+                path = out_dir / name
+                sf.write(str(path), recon_np, 48000)
+                artifacts[variant] = {
+                    "path": str(path),
+                    "samples": int(recon_np.size),
+                }
+        wall = time.monotonic() - t0
+
+        try:
+            vae_dtype = str(next(vae.parameters()).dtype)
+        except StopIteration:
+            vae_dtype = "unknown"
+
+        def _sha(p: Path) -> str:
+            h = hashlib.sha256()
+            h.update(p.read_bytes())
+            return h.hexdigest()
+
+        out_sr = int(getattr(vae, "out_sample_rate", 48000))
+        return {
+            "status": "ok",
+            "encode_sample_rate": in_sr,
+            "decode_sample_rate": out_sr,
+            "vae_dtype": vae_dtype,
+            "vae_device": str(device),
+            "latent_shape": list(lat.shape),
+            "latent_rate_hz": in_sr / int(getattr(vae, "chunk_size", 1)),
+            "encode_input": {
+                "path": str(input16k_path),
+                "samples": int(wav.numel()),
+                "sha256": _sha(input16k_path),
+            },
+            "artifacts": {
+                k: {**v, "sha256": _sha(Path(v["path"]))}
+                for k, v in artifacts.items()
+            },
+            "wall_seconds": wall,
+            "metadata": {"codec": "AudioVAE V2 (asymmetric 16k->48k)",
+                         "probe": True},
         }
 
     def handle_shutdown(self, params: dict) -> dict:

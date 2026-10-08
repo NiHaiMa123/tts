@@ -1,0 +1,88 @@
+# Phase 5A — VoxCPM2 stability + codec attribution + prompt A/B
+# (PLAN.md section 23). Bounded budget: <=18 zero-shot WAVs.
+# Everything below is frozen; changing any value means a new experiment.
+experiment_id: suoming_voxcpm_phase5a
+output_dir: outputs/gates/suoming_voxcpm_phase5a
+character: suoming
+backend: voxcpm2
+
+# Prompts — P0 is the production baseline and must be preserved as-is.
+# P1/P2 are candidates only; a higher score does NOT flip the default
+# without explicit user approval.
+prompts:
+- id: P0
+  role: baseline
+  split: inbox_reference
+  source: data/inbox (legacy reviewed asset)
+  audio: ${DOTSTTS_ROOT}/data/inbox/锁暝/中立_neutral/【中立_neutral】谛天鉴除了处理岁主事务，也掌管天文、历法。各州分鉴各有职责，梦州也有自己——唔……先前御者说对谛天鉴了解不多，不知不觉话多了些。总之，谛天鉴为岁主尽责，那自然，.wav
+  sha256: c4322e3230ab952edb7cd456329cb5b48195d9f33c5459c0ba76d8d79d3a7f92
+  text: 谛天鉴除了处理岁主事务，也掌管天文、历法。各州分鉴各有职责，梦州也有自己——唔……先前御者说对谛天鉴了解不多，不知不觉话多了些。总之，谛天鉴为岁主尽责，那自然，御者若有所求，无论缘由，我都会回应。
+- id: P1
+  role: candidate
+  split: test
+  source: datasets/suoming/v1/test.jsonl#8 fid=6a6ec2d33c4539fd
+  audio: ${DOTSTTS_ROOT}/data/work/standardized/25/25ead803ffa2a8615c8da6515058b0cfc12b9a864163f222fa181feb52d318c0.wav
+  sha256: 0ba5459705ac9f84326cfee1483183998c1d0c47be653a9df7fac46ae992c4bf
+  text: 「恶瘴」总是携雨而至，可它覆灭之后，我倒喜欢上了雨，淅淅沥沥中，已不再有噩耗。
+- id: P2
+  role: candidate
+  split: validation
+  source: datasets/suoming/v1/validation.jsonl#0 fid=27cd4b76528acdb6
+  audio: ${DOTSTTS_ROOT}/data/work/standardized/e6/e60e291ffb3431fadc10be7089662e9e24274476fd48b9d42bde3f921a18cbd7.wav
+  sha256: fb77c9bb8f4ad75d311e568171dca73c34be001dcf8fe11fbcc018aab66e29cb
+  text: 我始终想着，有一日能回到华亭，住进一间小屋。若这里需要我，我便出手相助；若不需要，便与九契他们一同，看小城在风平浪静中日来月往，如此便足够了。当然，那还是很遥远的事，眼下，心月狐与梦州大局为先。
+
+# Stability texts — all from held-out validation; none is the clone
+# prompt utterance. `rain` additionally has real ground truth audio.
+texts:
+- id: rain
+  split: validation
+  has_ground_truth: true
+  source: datasets/suoming/v1/validation.jsonl#11 fid=bf38867d624e76e1
+  audio: ${DOTSTTS_ROOT}/data/work/standardized/fb/fb8e3c080298ab2d0a404789e6973d68cf5af7bfadb8486851fae677f1aac1ca.wav
+  sha256: 0745cd41cc9d07e544ab83b9c9db43ac5d355fe2d4765ec970494fd0275693ab
+  text: 午后凉风拂过，雨云渐聚，细雨敲在屋檐上。我坐在窗边听雨，拭去玄朱锁上的薄尘。这确实是有些凄迷的场景，但……我很喜欢。
+- id: short_response
+  split: validation
+  source: datasets/suoming/v1/validation.jsonl#3 fid=4256545f053373b0
+  audio: ${DOTSTTS_ROOT}/data/work/standardized/aa/aae6df63e7bef70963d326a60a55c936ad8679dd969e08bee0020c8317be7056.wav
+  sha256: 36a16737ef9f493c8379cfca50143acf9c368a255c7246e117a37fc4d154f3f0
+  text: 开伞，由我来动手。
+- id: mid_exposition
+  split: validation
+  source: datasets/suoming/v1/validation.jsonl#2 fid=33e707acde1f4e22
+  audio: ${DOTSTTS_ROOT}/data/work/standardized/bf/bf4d26c9b7957e8fcc5a15e24fa8d03f412af4dfa152837207bc9c4a4f48f683.wav
+  sha256: 674473ffbc1f386c2d96ff19cbd43c54de9376852dd3d465b2c5e6452830293d
+  text: 若论诞生年岁，心月狐还比我小些，加之我协助「岁主」已久，见祂走到今日，难免心生欣慰。无论是昔日独自重塑「文明之匣」，还是如今真正成为「岁主」，心月狐都未曾辜负「岁主」的期望。
+- id: pause_emotion
+  split: validation
+  source: datasets/suoming/v1/validation.jsonl#9 fid=8f45b20823f2da2c
+  audio: ${DOTSTTS_ROOT}/data/work/standardized/0d/0d8b26244fdde8afd31ccd647e41b35bfb87c1f623e7f53f5288a1d58a3972ab.wav
+  sha256: f9ba5529200c02006548db81ae388ca6fba8b3f127b950d6a93b81810a092113
+  text: 接过州监印绶时，「岁主」曾与我约定，会找到「恶瘴」孽生的根源，并由我亲手了结。而如今我已知晓，一切皆源于蛇菰重伤「岁主」。那么……她的结局已经注定。
+
+stability:
+  texts: [rain, short_response, mid_exposition, pause_emotion]
+  seeds: [42, 43, 44]
+
+# A/B uses the same texts so P0 cells can reuse stability WAVs
+# (identical prompt+text+seed+args) — reuse is verified by output hash.
+prompt_ab:
+  baseline_prompt: P0
+  prompts: [P0, P1, P2]
+  texts: [rain, mid_exposition]
+  seed: 42
+
+# Codec attribution — two independent clean inputs; decode variants are
+# bounded diagnostic hypotheses, not a sweep.
+codec_diagnosis:
+  variants: [default, cond16000]
+  inputs:
+  - id: anchor_gt
+    split: validation
+    audio: ${DOTSTTS_ROOT}/data/work/standardized/fb/fb8e3c080298ab2d0a404789e6973d68cf5af7bfadb8486851fae677f1aac1ca.wav
+    sha256: 0745cd41cc9d07e544ab83b9c9db43ac5d355fe2d4765ec970494fd0275693ab
+  - id: independent_clean
+    split: test
+    audio: ${DOTSTTS_ROOT}/data/work/standardized/25/25ead803ffa2a8615c8da6515058b0cfc12b9a864163f222fa181feb52d318c0.wav
+    sha256: 0ba5459705ac9f84326cfee1483183998c1d0c47be653a9df7fac46ae992c4bf
