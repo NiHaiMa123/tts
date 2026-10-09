@@ -42,13 +42,23 @@ src/character_tts/
   audio/                      # wav io、sha256、输出路径安全
   web/                        # 试听页生成 + WebUI (FastAPI)
 workers/                      # 各后端薄适配（跑在 backend 自己的 env 里）
-backend_envs/                 # 各后端独立 venv（gitignore）
+  _worker_base.py             #   JSONL 协议公共底座
+  voxcpm_worker.py            #   backend_envs/voxcpm2
+  qwen3_tts_worker.py         #   backend_envs/qwen3_tts
+backend_envs/                 # 各后端/ASR 独立 venv（gitignore）
+  voxcpm2/  qwen3_tts/        #   TTS 后端
+  asr_sensevoice/  asr_faster_whisper/  asr_qwen3/   # ASR 辅助
+  voxcpm2_train/              #   LoRA 训练 env（pilot 已关闭，保留可复用）
+models/                       # 本地模型资产（gitignore）
+  asr/<backend>/<rev>/        #   三个 ASR 模型（共 ~4.3GB）
 inputs/                       # WebUI 批量台本 txt（gitignored）
 outputs/                      # 生成物与实验结果（gitignored）
   gates/<exp>/                #   评测产物 + listen/ 试听评分页
   webui/<角色>/               #   WebUI 产出 WAV
   user_gen/                   #   手工长文生成
 logs/                         # worker stderr、downloads.jsonl
+hf_cache/                     # HF 模型下载缓存（gitignore，TTS_MODEL_ROOT）
+启动TTS.vbs                   # 双击入口：起控制台服务器 + 自动开 Edge
 ```
 
 ## 关键约定
