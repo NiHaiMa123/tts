@@ -37,7 +37,7 @@ def assess_inbox(inbox: Path, report_path: Path,
     report = {
         "inbox": str(inbox), "files": len(rows), "flagged": len(flagged),
         "flags_by_kind": by_flag,
-        "speaker_check": "skipped_no_encoder",  # reserved hook
+        "speaker_check": "see scripts/ingest/speaker_check.py",
         "rows": rows,
     }
     report_path.parent.mkdir(parents=True, exist_ok=True)

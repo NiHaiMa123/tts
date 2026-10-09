@@ -122,6 +122,20 @@ _TRANSCRIBERS = {
 
 def _collect_targets(args) -> list[tuple[str, Path, str]]:
     targets: list[tuple[str, Path, str]] = []
+    if args.index:
+        index_path = Path(args.index).resolve()
+        audio_root = Path(args.audio_root).resolve() \
+            if args.audio_root else index_path.parent / "audio"
+        for line in index_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if row.get("status") != "ok":
+                continue
+            # rows without text still need the hypothesis (fills text_asr)
+            wav = (audio_root / row["audio"]).resolve()
+            if wav.is_file():
+                targets.append((row["source"], wav, row["text"]))
     if args.manifest:
         manifest_path = Path(args.manifest).resolve()
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -152,6 +166,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--backend", required=True, choices=sorted(BACKENDS))
     ap.add_argument("--manifest", help="gate/eval manifest.json (batch mode)")
+    ap.add_argument("--index",
+                    help="ingest index.jsonl (ref = filename/parsed text)")
+    ap.add_argument("--audio-root",
+                    help="pool dir for --index (default: <index dir>/audio)")
     ap.add_argument("--wav", action="append",
                     help="wav path; repeatable, pairs with --text/--text-file")
     ap.add_argument("--text", action="append",
@@ -162,6 +180,8 @@ def main() -> int:
                     help="default: models/asr/<backend>/<rev>")
     ap.add_argument("--out", required=True)
     ap.add_argument("--device", default="cuda:0")
+    ap.add_argument("--limit", type=int, default=None,
+                    help="process at most N targets (smoke test)")
     args = ap.parse_args()
 
     model_root = Path(args.model_root or BACKENDS[args.backend]).resolve()
@@ -169,9 +189,11 @@ def main() -> int:
         print(f"model root missing: {model_root}", file=sys.stderr)
         return 2
     targets = _collect_targets(args)
+    if args.limit:
+        targets = targets[: args.limit]
     if not targets:
-        print("no targets: pass --manifest or --wav with --text/--text-file",
-              file=sys.stderr)
+        print("no targets: pass --manifest/--index or --wav with "
+              "--text/--text-file", file=sys.stderr)
         return 2
 
     wavs = [w for _, w, _ in targets]
@@ -191,6 +213,8 @@ def main() -> int:
         "model": str(model_root),
         "device": args.device,
         "auxiliary_only": True,
+        "mode": "index" if args.index else
+                ("manifest" if args.manifest else "wav"),
         "results": results,
     }
     out_path = Path(args.out)

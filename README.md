@@ -45,7 +45,8 @@ src/character_tts/
 scripts/
   start_webui.py              # WebUI 入口（启动TTS.vbs 的目标，勿移）
   asr_check.py                # ASR 辅助检查（三后端统一入口）
-  ingest/                     # 入库 CLI：assess/standardize/review/freeze
+  ingest/                     # 入库 CLI：import/assess/standardize/
+                              #   speaker_check/enrich/review/freeze/audit
   eval/                       # 评测/实验 runner + 评分导出
     run_gate.py  run_voxcpm_phase5a.py  run_voxcpm_phase5a2.py
     export_*_ratings.py
@@ -72,6 +73,7 @@ backend_envs/                 # 各后端/ASR 独立 venv（gitignore）
   voxcpm2_train/              #   LoRA 训练 env（pilot 已关闭，保留可复用）
 models/                       # 本地模型资产（gitignore）
   asr/<backend>/<rev>/        #   三个 ASR 模型（共 ~4.3GB）
+  speaker/                    #   CampPlus 声纹模型（首次自动下载 ~28MB）
 inputs/                       # WebUI 批量台本 txt（gitignored）
 outputs/                      # 生成物与实验结果（gitignored）
   gates/<exp>/                #   冻结实验目录：wav + manifest + listen/ + logs/

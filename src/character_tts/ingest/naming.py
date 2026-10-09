@@ -15,15 +15,23 @@ def parse_inbox_name(path: Path) -> tuple[str | None, str]:
     (which carries `<标签>_<eng>` names like 中立_neutral).
     """
     stem = path.stem
+    label = path.parent.name if path.parent.name != "inbox" else None
     m = _NAME_RE.match(stem)
     if m:
-        return m.group("label"), m.group("text").strip()
-    label = path.parent.name if path.parent.name != "inbox" else None
-    # bare "【label】.wav" carries no transcript -> empty text, not garbage
+        label = m.group("label")
+        text = m.group("text").strip()
+        # "【label】_10" style numbered exports carry no transcript
+        if re.fullmatch(r"[_\-\d]+", text):
+            text = ""
+        return label, text
     bare = re.match(r"^【(?P<l>[^】]+)】\s*$", stem)
     if bare:
         return label or bare.group("l"), ""
-    return label, stem.strip()
+    text = stem.strip()
+    # bare numbered stems ("1001", "_10") carry no transcript either
+    if re.fullmatch(r"[_\-\d]+", text):
+        text = ""
+    return label, text
 
 
 def norm_text(text: str) -> str:

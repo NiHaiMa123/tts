@@ -54,8 +54,15 @@ def freeze_dataset(index_path: Path, dataset_dir: Path,
 
     seen_audio, seen_text, entries, dropped = set(), set(), [], []
     for r in rows:
-        fid = text_fid(r.get("text") or "", r["audio_sha256"])
-        nt = norm_text(r.get("text") or "")
+        text = r.get("text") or ""
+        text_source = "filename"
+        if not norm_text(text) and r.get("text_asr"):
+            text, text_source = r["text_asr"], "asr"
+        elif r.get("provenance", {}).get("text") and \
+                not norm_text(text):
+            text, text_source = r["provenance"]["text"], "provenance"
+        fid = text_fid(text, r["audio_sha256"])
+        nt = norm_text(text)
         if fid in exclude_fids or r["audio_sha256"] in exclude_fids:
             dropped.append({"fid": fid, "why": "reviewed_out"})
             continue
@@ -76,8 +83,11 @@ def freeze_dataset(index_path: Path, dataset_dir: Path,
         seen_audio.add(r["audio_sha256"])
         seen_text.add(nt)
         entries.append({"fid": fid, "audio": r["audio"],
-                        "text": r.get("text") or "",
-                        "label": r.get("label")})
+                        "audio_sha256": r["audio_sha256"],
+                        "source_sha256": r.get("source_sha256"),
+                        "text": text, "text_source": text_source,
+                        "label": r.get("label"),
+                        "provenance": r.get("provenance")})
 
     audio_dir = dataset_dir / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
@@ -94,8 +104,14 @@ def freeze_dataset(index_path: Path, dataset_dir: Path,
             audio_field = wav.relative_to(root).as_posix()
         except ValueError:
             audio_field = f"audio/{e['audio']}"
-        splits[_split_of(e["fid"], val_frac, test_frac)].append(
-            {"audio": audio_field, "fid": e["fid"], "text": e["text"]})
+        rec = {"audio": audio_field, "fid": e["fid"], "text": e["text"],
+               "audio_sha256": e["audio_sha256"], "label": e["label"],
+               "text_source": e["text_source"]}
+        if e.get("source_sha256"):
+            rec["source_sha256"] = e["source_sha256"]
+        if e.get("provenance"):
+            rec["provenance"] = e["provenance"]
+        splits[_split_of(e["fid"], val_frac, test_frac)].append(rec)
 
     stats = {}
     for name, recs in splits.items():
@@ -113,6 +129,9 @@ def freeze_dataset(index_path: Path, dataset_dir: Path,
         "split": {"method": "sha256(split|fid) fraction",
                   "validation_frac": val_frac, "test_frac": test_frac},
         "fid_format": "sha256(norm_text|audio_sha256)",
+        "row_fields": ["audio", "fid", "text", "text_source", "label",
+                        "audio_sha256", "source_sha256?", "provenance?"],
+        "text_sources": dict(Counter(e["text_source"] for e in entries)),
         "dropped": dropped,
     }
     (dataset_dir / "manifest.json").write_text(
