@@ -75,13 +75,27 @@ uv pip install --python .venv/Scripts/python.exe -e ".[metrics,web,dev]"
 powershell -File scripts/bootstrap/setup_voxcpm.ps1     # 锁暝生产环境
 powershell -File scripts/bootstrap/setup_qwen3_tts.ps1
 
-# ASR 辅助检查 env（SenseVoice，仅辅助证据用）
+# ASR 辅助检查 env（三套，仅辅助证据用；均 py3.12）
 uv venv backend_envs/asr_sensevoice --python 3.12
 uv pip install --python backend_envs/asr_sensevoice/Scripts/python.exe \
   "torch==2.8.0+cu128" "torchaudio==2.8.0+cu128" \
   --index-url https://download.pytorch.org/whl/cu128
 uv pip install --python backend_envs/asr_sensevoice/Scripts/python.exe \
   "funasr==1.4.4" soundfile
+
+uv venv backend_envs/asr_faster_whisper --python 3.12
+uv pip install --python backend_envs/asr_faster_whisper/Scripts/python.exe \
+  "faster-whisper==1.2.1" "ctranslate2==4.8.1" "av==18.1.0" \
+  "onnxruntime==1.29.0" "tokenizers==0.23.1" \
+  nvidia-cublas-cu12 nvidia-cudnn-cu12
+
+uv venv backend_envs/asr_qwen3 --python 3.12
+uv pip install --python backend_envs/asr_qwen3/Scripts/python.exe \
+  "torch==2.8.0+cu128" "torchaudio==2.8.0+cu128" "torchvision==0.23.0+cu128" \
+  --index-url https://download.pytorch.org/whl/cu128
+uv pip install --python backend_envs/asr_qwen3/Scripts/python.exe \
+  "qwen-asr==0.0.6" "transformers==4.57.6" "accelerate==1.12.0" \
+  "librosa==1.0.0" "soundfile==0.14.0" "qwen-omni-utils==0.0.9"
 ```
 
 ## 加新角色
@@ -92,20 +106,21 @@ uv pip install --python backend_envs/asr_sensevoice/Scripts/python.exe \
    `reference` + `dataset` + `evaluation.anchor_texts`
 4. WebUI 下拉自动出现，无需改代码
 
-## ASR 辅助检查（SenseVoice）
+## ASR 辅助检查（多后端）
 
 ```powershell
-# manifest 批量
-backend_envs\asr_sensevoice\Scripts\python.exe scripts\asr_sensevoice.py ^
-  --manifest outputs/gates/<exp>/manifest.json --out <exp>/asr_check.json
+# manifest 批量（backend ∈ sensevoice | faster_whisper | qwen3_asr）
+backend_envs\asr_<backend>\Scripts\python.exe scripts\asr_check.py ^
+  --backend <backend> --manifest outputs/gates/<exp>/manifest.json ^
+  --out <exp>/asr_check.json
 
 # 任意 wav + 参考文本
-backend_envs\asr_sensevoice\Scripts\python.exe scripts\asr_sensevoice.py ^
-  --wav xxx.wav --text-file xxx.txt --out out.json
+backend_envs\asr_<backend>\Scripts\python.exe scripts\asr_check.py ^
+  --backend <backend> --wav xxx.wav --text-file xxx.txt --out out.json
 ```
 
-模型在 `models/asr/sensevoice/`（gitignored，901MB）。输出 char-CER，
-仅辅助证据——`text_complete` 仍是人耳判断字段。
+模型在 `models/asr/<backend>/<rev>/`（gitignored，共 ~4.3GB）。
+输出 char-CER，仅辅助证据——`text_complete` 仍是人耳判断字段。
 
 ## 测试
 
