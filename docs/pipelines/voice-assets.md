@@ -37,7 +37,8 @@ FNV-1a 32 位哈希：
 data/characters/<id>/inbox/<情绪_标签>/【<情绪>】<台词>.wav
 ```
 
-锁暝现状：270 条 / 142MB（中立_neutral 等目录）。文件名约定
+锁暝现状：161 条（中立_neutral），已按 v1 数据集回剪——每条有
+`provenance.jsonl` 记录 v1 台词/标签/split + 源 sha256。文件名约定
 `【标签】台词原文.wav`；编号导出 `【标签】_<n>.wav` 与哈希命名
 `<hash>.wav` 视为无文本，由 provenance sidecar 或 ASR 补。
 
