@@ -82,9 +82,8 @@ def test_evaluation_case_kinds(tmp_path):
 
 def test_repo_configs_parse(monkeypatch):
     """Shipped configs must validate with machine-local vars set."""
-    monkeypatch.setenv("DOTSTTS_ROOT", "E:/project/dotstts")
     monkeypatch.setenv("TTS_MODEL_ROOT", "hf_cache")
-    for name in ("dots_legacy", "voxcpm2", "qwen3_tts"):
+    for name in ("voxcpm2", "qwen3_tts"):
         b = loader.load_backend(name)
         assert b.backend_id == name
         assert b.worker_python

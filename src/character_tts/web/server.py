@@ -437,7 +437,6 @@ def _list_inputs() -> list[Path]:
 
 _BACKEND_LABELS = {
     "voxcpm2": "VoxCPM2 零样本 · 48kHz",
-    "dots_legacy": "DotsTTS 旧基线",
     "qwen3_tts": "Qwen3-TTS 零样本",
 }
 

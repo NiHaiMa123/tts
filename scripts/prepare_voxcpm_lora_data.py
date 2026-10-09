@@ -35,7 +35,7 @@ from character_tts.audio.io import read_wav  # noqa: E402
 from character_tts.evaluation.phase5a import load_phase5a_config  # noqa: E402
 from character_tts.registry.loader import load_character, repo_root  # noqa: E402
 
-DOTSTTS = Path(r"E:\project\dotstts")
+DATA_V1 = Path("data/characters/suoming/datasets/v1")
 MIN_ACCEPT = 30          # rows
 MIN_ACCEPT_SECONDS = 120.0
 MIN_DUR, MAX_DUR = 0.4, 90.0
@@ -43,6 +43,11 @@ SIM_REJECT = 0.85        # near-dup text similarity vs blocklist
 VAL_ROWS = 8             # rows reserved for val-loss logging only
 
 _PUNCT = re.compile(r"[\s，。！？、；：「」『』（）《》…—\-,.!?;:\"'~·]")
+
+
+def _resolve_repo(p: str) -> Path:
+    path = Path(p)
+    return path if path.is_absolute() else repo_root() / path
 
 
 def _norm_text(t: str) -> str:
@@ -140,7 +145,7 @@ def prepare(train_jsonl: Path, val_jsonl: Path, blocklist: dict,
         if not line.strip():
             continue
         row = json.loads(line)
-        audio = Path(row["audio"])
+        audio = _resolve_repo(row["audio"])
         text = (row.get("text") or "").strip()
         fid = row.get("fid")
 
@@ -207,7 +212,7 @@ def prepare(train_jsonl: Path, val_jsonl: Path, blocklist: dict,
         if len(val_rows) >= VAL_ROWS or not line.strip():
             continue
         row = json.loads(line)
-        audio = Path(row["audio"])
+        audio = _resolve_repo(row["audio"])
         nt = _norm_text(row.get("text") or "")
         fid = row.get("fid")
         if (fid and fid in block_fids) or nt in block_texts \
@@ -263,9 +268,9 @@ def prepare(train_jsonl: Path, val_jsonl: Path, blocklist: dict,
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--train-manifest",
-                    default=str(DOTSTTS / "datasets/suoming/v1/train.jsonl"))
+                    default=str(DATA_V1 / "train.jsonl"))
     ap.add_argument("--val-manifest",
-                    default=str(DOTSTTS / "datasets/suoming/v1/validation.jsonl"))
+                    default=str(DATA_V1 / "validation.jsonl"))
     ap.add_argument("--out-dir",
                     default="outputs/training/suoming_voxcpm_lora_pilot")
     args = ap.parse_args()
@@ -274,7 +279,8 @@ def main() -> int:
     if not out_dir.is_absolute():
         out_dir = repo_root() / out_dir
     blocklist = build_blocklist()
-    stats = prepare(Path(args.train_manifest), Path(args.val_manifest),
+    stats = prepare(_resolve_repo(args.train_manifest),
+                    _resolve_repo(args.val_manifest),
                     blocklist, out_dir)
     print(json.dumps(stats, ensure_ascii=False, indent=2))
     return 0 if stats["decision"] == "ok" else 3

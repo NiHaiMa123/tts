@@ -28,8 +28,6 @@ evaluation:
     sha256: 0745cd41cc9d07e544ab83b9c9db43ac5d355fe2d4765ec970494fd0275693ab
     source: data/characters/suoming/datasets/v1/validation.jsonl
 provenance:
-  imported_from: E:\project\dotstts
+  imported_from: E:\project\dotstts   # legacy project, no longer a dependency
   imported_at: '2026-10-08T10:18:02+00:00'
-  importer: scripts/import_legacy_assets.py
-  assets_migrated: scripts/migrate_suoming_assets.py
-  migration_note: audio copied into repo; jsonl audio fields rewritten to repo-relative paths
+  assets_migrated: true  # inbox + datasets + reference copied in-repo; jsonl paths repo-relative

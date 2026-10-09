@@ -4,7 +4,7 @@
 Usage:
     python scripts/run_gate.py [--evaluation suoming_gate_v1]
                                [--character suoming]
-                               [--backend dots_legacy] [--backend voxcpm2]
+                               [--backend voxcpm2] [--backend qwen3_tts]
 """
 
 from __future__ import annotations

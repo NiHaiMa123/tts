@@ -24,7 +24,7 @@ lora:           # identical to configs/training/suoming_voxcpm_lora_pilot.yaml
 prompts:
 - id: P0
   role: baseline
-  audio: ${DOTSTTS_ROOT}/data/inbox/锁暝/中立_neutral/【中立_neutral】谛天鉴除了处理岁主事务，也掌管天文、历法。各州分鉴各有职责，梦州也有自己——唔……先前御者说对谛天鉴了解不多，不知不觉话多了些。总之，谛天鉴为岁主尽责，那自然，.wav
+  audio: ${TTS_ROOT}/data/characters/suoming/inbox/中立_neutral/【中立_neutral】谛天鉴除了处理岁主事务，也掌管天文、历法。各州分鉴各有职责，梦州也有自己——唔……先前御者说对谛天鉴了解不多，不知不觉话多了些。总之，谛天鉴为岁主尽责，那自然，.wav
   sha256: c4322e3230ab952edb7cd456329cb5b48195d9f33c5459c0ba76d8d79d3a7f92
   text: 谛天鉴除了处理岁主事务，也掌管天文、历法。各州分鉴各有职责，梦州也有自己——唔……先前御者说对谛天鉴了解不多，不知不觉话多了些。总之，谛天鉴为岁主尽责，那自然，御者若有所求，无论缘由，我都会回应。
 

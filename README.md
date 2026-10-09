@@ -1,11 +1,12 @@
 # character-tts
 
-与底座无关的角色 TTS 平台。DotsTTS 为 legacy baseline，VoxCPM2 与
-Qwen3-TTS 为一等后端。主平台不复制模型实现——每个 backend 在自己的
-Python 环境里以 **JSONL stdin/stdout worker** 方式接入。
+与底座无关的角色 TTS 平台，完全自包含（不依赖旧 dotstts 项目）。
+VoxCPM2 与 Qwen3-TTS 为一等后端。主平台不复制模型实现——每个 backend
+在自己的 Python 环境里以 **JSONL stdin/stdout worker** 方式接入。
 
 **当前生产路径**：锁暝 = VoxCPM2 零样本（LoRA pilot 已关闭，见
-`docs/reports/`）。
+`docs/reports/`；Dots legacy 后端已随依赖切断移除，需要时从旧项目
+重新迁移）。
 
 ## 日常使用（WebUI）
 
@@ -68,12 +69,10 @@ uv venv .venv --python 3.11
 uv pip install --python .venv/Scripts/python.exe -e ".[metrics,web,dev]"
 
 # .env.local（gitignore）
-#   DOTSTTS_ROOT=E:/project/dotstts   # 仅历史导入/评测需要；角色资产已收编
 #   TTS_MODEL_ROOT=E:/project/tts/hf_cache
 
 # 后端 env（按需）
 powershell -File scripts/bootstrap/setup_voxcpm.ps1     # 锁暝生产环境
-powershell -File scripts/bootstrap/setup_dots_legacy.ps1
 powershell -File scripts/bootstrap/setup_qwen3_tts.ps1
 ```
 
