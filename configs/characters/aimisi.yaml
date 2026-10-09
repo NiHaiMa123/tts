@@ -1,0 +1,32 @@
+character_id: aimisi
+display_name: 爱弥斯
+backend: voxcpm2
+dataset:
+  source: curated_inbox
+  root: ${TTS_ROOT}/data/characters/aimisi/datasets/v1
+  manifest: ${TTS_ROOT}/data/characters/aimisi/datasets/v1/manifest.json
+  train_manifest: ${TTS_ROOT}/data/characters/aimisi/datasets/v1/train.jsonl
+  validation_manifest: ${TTS_ROOT}/data/characters/aimisi/datasets/v1/validation.jsonl
+  test_manifest: ${TTS_ROOT}/data/characters/aimisi/datasets/v1/test.jsonl
+reference:
+  audio: ${TTS_ROOT}/assets/characters/aimisi/reference/ref.wav
+  sha256: ''
+  text: ''
+adapters: {}
+postprocess: {}
+evaluation:
+  anchor_texts:
+  - id: doctor
+    text: 他是校医嘛，学生基本都认识的。我和他不算太熟，但陆医生在拉海洛任职很久了，是个可靠的人。
+    audio: ${TTS_ROOT}/data/characters/aimisi/datasets/v1/audio/e900a19c523037fedc6da66c3884afd3a25d4b383755638a523630ddca669473.wav
+    sha256: e900a19c523037fedc6da66c3884afd3a25d4b383755638a523630ddca669473
+    source: data/characters/aimisi/datasets/v1/test.jsonl
+  - id: netname
+    text: 对，是我。哎呀，别念网名啦，多让人不好意思——
+    audio: ${TTS_ROOT}/data/characters/aimisi/datasets/v1/audio/f71829db4d399785dcb1a843c3c6afe63e492174ba44660ccae83a39d6f9afd0.wav
+    sha256: f71829db4d399785dcb1a843c3c6afe63e492174ba44660ccae83a39d6f9afd0
+    source: data/characters/aimisi/datasets/v1/test.jsonl
+provenance:
+  imported_from: E:\project\dotstts
+  inbox: 人工筛选「可以」目录 223 条
+  dataset: pipeline v1 (freeze)

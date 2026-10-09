@@ -109,16 +109,35 @@ backend_envs\asr_sensevoice\Scripts\python.exe scripts\asr_check.py ^
 
 均为**辅助证据**：flag 只提示人耳审核，freeze 不因 flag 自动丢弃。
 
-### 3) 审核（自包含网页包）
+### 3) 审核（网页，点击即写盘）
 
 ```bat
 .venv\Scripts\python.exe scripts\ingest\build_review.py ^
     --index <index.jsonl> --audio-root <pool> --out-dir outputs\_tmp\review_<id>
+
+.venv\Scripts\python.exe scripts\ingest\serve_review.py ^
+    --bundle outputs\_tmp\review_<id> --port 7865
 ```
 
-打开 `review.html`：逐条听、标 `drop`（不入库）和问题 tag
+浏览器开 `http://127.0.0.1:7865/`：逐条听、点 `drop`（不入库）和问题 tag
 （wrong_speaker/noisy/wrong_text/clipped/emotion_off），
-无文本行显示 ASR 建议文本（前缀 `ASR:`）。导出 `decisions.json`。
+无文本行显示 ASR 建议文本（前缀 `ASR:`）。**每次点击直接写入
+`<bundle>/decisions.json`，无需导出**；刷新/重开会自动恢复历史决策。
+
+### 3b) 选参考音（同一套交互）
+
+```bat
+.venv\Scripts\python.exe scripts\ingest\build_refpick.py ^
+    --index <index.jsonl> --audio-root <pool> --char <id> ^
+    --out-dir outputs\_tmp\refpick_<id> [--top-n 40] [--min-cos 0.75]
+
+.venv\Scripts\python.exe scripts\ingest\serve_review.py ^
+    --bundle outputs\_tmp\refpick_<id> --port 7866
+```
+
+开 `http://127.0.0.1:7866/`：候选按声纹 cos 降序，点「选为参考音」
+即写入 `assets/characters/<id>/reference/ref.wav` + `ref_choice.json`，
+并自动回填 `configs/characters/<id>.yaml` 的 `reference.sha256/text`。
 
 ### 4) 冻结 + 审计
 
@@ -126,7 +145,7 @@ backend_envs\asr_sensevoice\Scripts\python.exe scripts\asr_check.py ^
 .venv\Scripts\python.exe scripts\ingest\freeze_dataset.py ^
     --index <index.jsonl> --pool <pool> ^
     --dataset-dir data\characters\<id>\datasets\v1 ^
-    [--exclude-file decisions.json]
+    [--exclude-file outputs\_tmp\review_<id>\decisions.json]
 
 :: 完整性审计：音频存在/sha 重算/fid 复算/跨 split 泄漏检查，违规 exit 1
 .venv\Scripts\python.exe scripts\ingest\audit_dataset.py ^
@@ -146,13 +165,14 @@ backend_envs\asr_sensevoice\Scripts\python.exe scripts\asr_check.py ^
   其余旗标（mostly_silent/too_quiet/clipped/too_long/too_hot）仅警告，由审核决定
 - 冻结时音频从 `--pool` 复制进 `dataset/audio/`，逐条校验存在——
   jsonl 不产生悬空引用
-
 - **文本来源**逐行记入 `text_source`：文件名 `【标签】台词` → `filename`；
   导入 sidecar → `provenance`；无文本时 ASR 回填 → `asr`。
   锁暝 inbox 实测文件名多为 `【标签】_<编号>.wav`（无台词），
   187/263 条文本由 ASR 回填——审核页会标注 `ASR:` 前缀
-- 冻结时音频从 `--pool` 复制进 `dataset/audio/`，逐条校验存在——
-  jsonl 不产生悬空引用
+- **所有试听/审核网页走同一交互**：`build_*` 生成自包含 bundle，
+  `serve_review.py` 起本地服务，点击直接写盘（审核→`decisions.json`，
+  参考音→`ref.wav`+yaml，盲听评分→`listen/listen-ratings*.json`）——
+  一律没有"导出 json"步骤；file:// 直开才退回 localStorage+手动导出
 
 锁暝实测（全量真实跑通）：270 inbox → 4 硬拒（超短）→ 266 标准化 →
 声纹 266 行（大部分 cos 0.64–0.87，1 条 0.35 疑似异声）+ ASR 266 行 →

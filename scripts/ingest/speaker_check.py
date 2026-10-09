@@ -45,8 +45,10 @@ def main() -> int:
     ap.add_argument("--index", required=True, help="ingest index.jsonl")
     ap.add_argument("--audio-root",
                     help="pool dir (default: <index dir>/audio)")
-    ap.add_argument("--reference", action="append", required=True,
-                    help="reference wav of the target speaker; repeatable")
+    ap.add_argument("--reference", action="append",
+                    help="reference wav of the target speaker; repeatable. "
+                         "Omit for self-centroid mode (unregistered "
+                         "character: centroid = mean of all rows)")
     ap.add_argument("--model-root", default=None,
                     help="local model dir; default auto-download into "
                          "models/speaker/ (modelscope cache)")
@@ -70,18 +72,8 @@ def main() -> int:
     model = AutoModel(model=model_ref, device=args.device,
                       disable_update=True)
 
-    refs = []
-    for ref_arg in args.reference:
-        emb = _embed(model, Path(ref_arg).resolve())
-        if emb is None:
-            print(f"reference produced no embedding: {ref_arg}",
-                  file=sys.stderr)
-            return 2
-        refs.append(emb)
     import numpy as np
-    ref_vec = _unit(np.mean(refs, axis=0))
-
-    rows = []
+    rows, wavs, embs = [], [], []
     for line in index_path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
@@ -94,17 +86,40 @@ def main() -> int:
         if args.limit and len(rows) >= args.limit:
             break
         emb = _embed(model, wav)
-        if emb is None:
-            rows.append({"source": row["source"], "speaker_cos": None})
-            continue
-        rows.append({"source": row["source"],
-                     "speaker_cos": round(float(np.dot(emb, ref_vec)), 4)})
-        print(f"[{len(rows)}] {row['source']} cos={rows[-1]['speaker_cos']}",
-              flush=True)
+        rows.append({"source": row["source"], "_emb": emb})
+        wavs.append(wav)
+        embs.append(emb)
 
-    payload = {"model": model_ref, "references": args.reference,
-               "device": args.device, "auxiliary_only": True,
-               "results": rows}
+    if args.reference:
+        refs = []
+        for ref_arg in args.reference:
+            emb = _embed(model, Path(ref_arg).resolve())
+            if emb is None:
+                print(f"reference produced no embedding: {ref_arg}",
+                      file=sys.stderr)
+                return 2
+            refs.append(emb)
+        ref_vec = _unit(np.mean(refs, axis=0))
+    else:
+        valid = [e for e in embs if e is not None]
+        if not valid:
+            print("no embeddings computed", file=sys.stderr)
+            return 2
+        ref_vec = _unit(np.mean(valid, axis=0))
+        print(f"self-centroid mode: mean of {len(valid)} embeddings")
+
+    out_rows = []
+    for row in rows:
+        emb = row.pop("_emb")
+        row["speaker_cos"] = None if emb is None else \
+            round(float(np.dot(emb, ref_vec)), 4)
+        out_rows.append(row)
+        print(f"[{len(out_rows)}] {row['source']} "
+              f"cos={row['speaker_cos']}", flush=True)
+
+    payload = {"model": model_ref, "references": args.reference or
+               "self_centroid", "device": args.device,
+               "auxiliary_only": True, "results": out_rows}
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),

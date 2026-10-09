@@ -141,10 +141,46 @@ uv pip install --python backend_envs/asr_qwen3/Scripts/python.exe \
 1. 源音频放 `data/characters/<id>/inbox/`（音频从哪来、入库管线四步
    命令：**`docs/pipelines/voice-assets.md`**——解包走 Ludiglot 项目，
    assess→standardize→review→freeze 用 `scripts/ingest/`）
-2. 参考音放 `assets/characters/<id>/reference/ref.wav`，算 sha256
-3. 建 `configs/characters/<id>.yaml`：`backend:` 锁后端 +
-   `reference` + `dataset` + `evaluation.anchor_texts`
+2. 建 `configs/characters/<id>.yaml`：`backend:` 锁后端 +
+   `dataset` + `evaluation.anchor_texts`（`reference` 可先留空）
+3. **选参考音**（网页点选，直接写盘，见下节）
 4. WebUI 下拉自动出现，无需改代码
+
+## 试听/审核网页（统一交互：点击即写盘，不导 json）
+
+所有试听类页面同一个用法——起一个本地服务
+（`serve_review.py`，stdlib http.server），**每次点击直接写入
+本地文件**，页面重开自动恢复历史状态；不经服务直接用 file://
+打开则退回浏览器 localStorage + 手动导出（备用）。
+
+```powershell
+# ① 数据审核：drop / 问题 tag → <bundle>/decisions.json
+.venv\Scripts\python.exe scripts\ingest\build_review.py `
+  --index <index.jsonl> --audio-root <pool> --out-dir outputs\_tmp\review_<id>
+.venv\Scripts\python.exe scripts\ingest\serve_review.py `
+  --bundle outputs\_tmp\review_<id> --port 7865
+# 浏览器开 http://127.0.0.1:7865/
+
+# ② 选参考音：点「选为参考音」→ assets/characters/<id>/reference/ref.wav
+#   + ref_choice.json + 自动回填 configs/characters/<id>.yaml 的
+#   reference.sha256 / text
+.venv\Scripts\python.exe scripts\ingest\build_refpick.py `
+  --index <index.jsonl> --audio-root <pool> --char <id> `
+  --out-dir outputs\_tmp\refpick_<id> --top-n 40 --min-cos 0.75
+.venv\Scripts\python.exe scripts\ingest\serve_review.py `
+  --bundle outputs\_tmp\refpick_<id> --port 7866
+# 浏览器开 http://127.0.0.1:7866/，候选按声纹 cos 降序
+
+# ③ 评测盲听页（run_gate / phase5a / 5a2 / lora pilot 生成的 listen/）
+.venv\Scripts\python.exe scripts\ingest\serve_review.py `
+  --bundle outputs\gates\<exp> --port 7867
+# 浏览器开 http://127.0.0.1:7867/listen/index.html
+# 每次评分即写 <exp>/listen/listen-ratings*.json——export_*_ratings.py
+# 直接读这个文件，格式与手动导出一致
+```
+
+参考音挑选建议：优先「中立_neutral、8–15s、无 flag、声纹 cos 高」的条
+目；选定后可随时重开同一 bundle 改选，yaml 会被覆盖更新。
 
 ## ASR 辅助检查（多后端）
 

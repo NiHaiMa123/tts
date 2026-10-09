@@ -1,10 +1,15 @@
-"""Static blind-listening page generator.
+"""Blind-listening page generator.
 
 Emits a single self-contained index.html under the gate output dir. All
 samples get an audio player plus subjective rating widgets (clarity /
 grittiness / likeness / naturalness 1-5, stability and free notes).
-Ratings persist to localStorage and export as JSON — the platform never
-pre-fills subjective scores.
+
+Serve the gate dir with ``scripts/ingest/serve_review.py --bundle
+outputs/gates/<exp>`` and every change POSTs straight to
+``<exp>/listen/listen-ratings*.json`` (export format) plus a ``.state``
+sidecar for restoring the page. Without the server the page falls back
+to localStorage + manual JSON export. The platform never pre-fills
+subjective scores.
 """
 
 from __future__ import annotations
@@ -45,9 +50,10 @@ _PAGE_TEMPLATE = """<!DOCTYPE html>
 <h1>__TITLE__</h1>
 <div class="meta" id="meta"></div>
 <div class="toolbar">
-  <button onclick="exportRatings()">导出评分 JSON</button>
+  <button onclick="exportRatings()">备用导出 JSON</button>
   <button class="secondary" onclick="clearRatings()">清空本页评分</button>
-  <span class="sub">评分仅保存在浏览器 localStorage，平台不自动填写。</span>
+  <span id="saved" class="sub">连接本地服务…</span>
+  <span class="sub">经 serve_review.py 打开时改动即写盘，无需导出。</span>
 </div>
 <table>
 <thead><tr>
@@ -60,62 +66,113 @@ _PAGE_TEMPLATE = """<!DOCTYPE html>
 <script>
 const SAMPLES = __SAMPLES__;
 const KEY = "tts-listen-" + location.pathname;
+const RATINGS_NAME = "listen-ratings.json";
 let ratings = {};
-try { ratings = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
-
-document.getElementById("meta").textContent = SAMPLES.meta;
-
-const tbody = document.getElementById("rows");
-for (const s of SAMPLES.items) {
-  const r = ratings[s.id] || {};
-  const tr = document.createElement("tr");
-  const ratingCell = (dim) =>
-    `<select data-id="${s.id}" data-dim="${dim}" onchange="save(this)">
-       <option value=""></option>` +
-    [1,2,3,4,5].map(v =>
-      `<option value="${v}" ${r[dim] == v ? "selected" : ""}>${v}</option>`
-    ).join("") + `</select>`;
-  const textCell = (dim) =>
-    `<input type="text" data-id="${s.id}" data-dim="${dim}"
-       value="${(r[dim] || "").replace(/"/g, "&quot;")}"
-       onchange="save(this)">`;
-  tr.innerHTML =
-    `<td><div class="sample-label">${s.id}</div>
-         <div class="sub">${s.backend} · ${s.kind}</div></td>
-     <td><audio controls preload="none" src="${s.src}"></audio>
-         <div class="sub">${s.duration}s · ${s.sample_rate}Hz</div></td>
-     <td><div class="sub">${s.params}</div></td>
-     <td>${ratingCell("clarity")}</td>
-     <td>${ratingCell("grit")}</td>
-     <td>${ratingCell("likeness")}</td>
-     <td>${ratingCell("naturalness")}</td>
-     <td>${textCell("stability")}</td>
-     <td>${textCell("notes")}</td>`;
-  tbody.appendChild(tr);
+let remoteOK = false, _pt = null;
+function STATE() { return {ratings}; }
+function adoptState(s) {
+  if (s && s.ratings) {
+    ratings = s.ratings;
+    localStorage.setItem(KEY, JSON.stringify(ratings));
+  }
 }
-
+function buildExport() {
+  return {page: location.pathname,
+          saved_at: new Date().toISOString(), ratings};
+}
+function setSaved(t) {
+  const e = document.getElementById("saved");
+  if (e) e.textContent = t;
+}
+function persist() {
+  localStorage.setItem(KEY, JSON.stringify(STATE()));
+  push();
+}
+function push() {
+  if (!remoteOK) return;
+  clearTimeout(_pt);
+  _pt = setTimeout(async () => {
+    try {
+      await fetch("/api/listen-ratings", {method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({name: RATINGS_NAME,
+          data: buildExport(), state: STATE()})});
+      setSaved("已写入 listen/" + RATINGS_NAME + " ✓");
+    } catch (e) {
+      remoteOK = false;
+      setSaved("服务断开，改动暂存浏览器");
+    }
+  }, 250);
+}
+function render() {
+  document.getElementById("meta").textContent = SAMPLES.meta;
+  const tbody = document.getElementById("rows");
+  for (const s of SAMPLES.items) {
+    const r = ratings[s.id] || {};
+    const tr = document.createElement("tr");
+    const ratingCell = (dim) =>
+      `<select data-id="${s.id}" data-dim="${dim}" onchange="save(this)">
+         <option value=""></option>` +
+      [1,2,3,4,5].map(v =>
+        `<option value="${v}" ${r[dim] == v ? "selected" : ""}>${v}</option>`
+      ).join("") + `</select>`;
+    const textCell = (dim) =>
+      `<input type="text" data-id="${s.id}" data-dim="${dim}"
+         value="${(r[dim] || "").replace(/"/g, "&quot;")}"
+         onchange="save(this)">`;
+    tr.innerHTML =
+      `<td><div class="sample-label">${s.id}</div>
+           <div class="sub">${s.backend} · ${s.kind}</div></td>
+       <td><audio controls preload="none" src="${s.src}"></audio>
+           <div class="sub">${s.duration}s · ${s.sample_rate}Hz</div></td>
+       <td><div class="sub">${s.params}</div></td>
+       <td>${ratingCell("clarity")}</td>
+       <td>${ratingCell("grit")}</td>
+       <td>${ratingCell("likeness")}</td>
+       <td>${ratingCell("naturalness")}</td>
+       <td>${textCell("stability")}</td>
+       <td>${textCell("notes")}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+async function boot() {
+  try {
+    const r = await fetch("/api/listen-ratings?name=" + RATINGS_NAME);
+    remoteOK = true;
+    if (r.ok) {
+      const d = await r.json();
+      if (d.state) adoptState(d.state);
+    }
+  } catch (e) {}
+  if (!Object.keys(ratings).length)
+    try { ratings = JSON.parse(localStorage.getItem(KEY) || "{}"); }
+    catch (e) {}
+  setSaved(remoteOK ? "已连接 serve_review.py — 改动即写盘"
+                    : "未连接 serve_review.py — 改动暂存浏览器");
+  render();
+}
 function save(el) {
   const id = el.dataset.id, dim = el.dataset.dim;
   ratings[id] = ratings[id] || {};
   ratings[id][dim] = el.value;
-  localStorage.setItem(KEY, JSON.stringify(ratings));
+  persist();
 }
 function exportRatings() {
-  const blob = new Blob([JSON.stringify({
-    page: location.pathname, exported_at: new Date().toISOString(),
-    ratings,
-  }, null, 2)], {type: "application/json"});
+  const blob = new Blob([JSON.stringify(buildExport(), null, 2)],
+                        {type: "application/json"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "listen-ratings.json";
+  a.download = RATINGS_NAME;
   a.click();
 }
 function clearRatings() {
   if (!confirm("清除本页所有已保存评分？")) return;
   ratings = {};
   localStorage.removeItem(KEY);
+  push();
   location.reload();
 }
+boot();
 </script>
 </body>
 </html>
@@ -259,105 +316,156 @@ _PHASE5A_TEMPLATE = """<!DOCTYPE html>
 <h1>__TITLE__</h1>
 <div class="meta" id="meta"></div>
 <div class="toolbar">
-  <button onclick="exportRatings()">导出评分 JSON</button>
+  <button onclick="exportRatings()">备用导出 JSON</button>
   <button class="secondary" onclick="toggleReveal()">解盲/隐藏真实标签</button>
   <button class="secondary" onclick="clearRatings()">清空本页评分</button>
-  <span class="sub">评分存 localStorage；导出 JSON 含 experiment_id + case_id +
-    output_sha256，重新生成 WAV 后旧评分不会误套。</span>
+  <span id="saved" class="sub">连接本地服务…</span>
+  <span class="sub">经 serve_review.py 打开时改动即写盘（含
+    experiment_id + case_id + output_sha256，重新生成 WAV 后旧评分
+    不会误套）；否则暂存 localStorage。</span>
 </div>
 <div id="groups"></div>
 <script>
 const DATA = __SAMPLES__;
 const KEY = "tts-listen-" + location.pathname;
+const RATINGS_NAME = "__RATINGS_NAME__";
 let ratings = {};
-try { ratings = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
-
-document.getElementById("meta").textContent = DATA.meta;
-
-const root = document.getElementById("groups");
-for (const g of DATA.groups) {
-  const h = document.createElement("h2");
-  h.textContent = g.title;
-  root.appendChild(h);
-  const table = document.createElement("table");
-  table.innerHTML = `<thead><tr>
-    <th>样本</th><th>播放</th>
-    <th>清澈度<br>1-5</th><th>磨砂/颗粒<br>1-5</th><th>像角色<br>1-5</th>
-    <th>自然度<br>1-5</th><th>文本完整</th><th>异常类型</th><th>备注</th>
-  </tr></thead>`;
-  const tbody = document.createElement("tbody");
-  for (const s of g.items) {
-    const r = ratings[s.case_id] || {};
-    const tr = document.createElement("tr");
-    const sel = (dim) =>
-      `<select data-id="${s.case_id}" data-dim="${dim}" onchange="save(this)">
-         <option value=""></option>` +
-      [1,2,3,4,5].map(v =>
-        `<option value="${v}" ${r[dim] == v ? "selected" : ""}>${v}</option>`
-      ).join("") + `</select>`;
-    const tc = (dim, opts) =>
-      `<select class="wide" data-id="${s.case_id}" data-dim="${dim}"
-         onchange="save(this)"><option value=""></option>` +
-      opts.map(v =>
-        `<option value="${v}" ${r[dim] == v ? "selected" : ""}>${v}</option>`
-      ).join("") + `</select>`;
-    const txt = (dim, ph) =>
-      `<input type="text" data-id="${s.case_id}" data-dim="${dim}"
-         placeholder="${ph || ''}"
-         value="${(r[dim] || "").replace(/"/g, "&quot;")}"
-         onchange="save(this)">`;
-    const audioCell = s.src
-      ? `<audio controls preload="none" src="${s.src}"></audio>
-         <div class="sub">${s.duration}s · ${s.sample_rate}Hz</div>`
-      : `<div class="fail">${s.error || "无输出"}</div>`;
-    tr.innerHTML =
-      `<td><div class="sample-label">${s.label}</div>
-           <div class="identity">${s.case_id}</div></td>
-       <td>${audioCell}</td>
-       <td>${sel("clarity")}</td><td>${sel("grit")}</td>
-       <td>${sel("likeness")}</td><td>${sel("naturalness")}</td>
-       <td>${tc("text_complete", ["是", "否", "待审"])}</td>
-       <td>${txt("artifact_type", "如:吞字/电流")}</td>
-       <td>${txt("notes")}</td>`;
-    tbody.appendChild(tr);
+let remoteOK = false, _pt = null;
+function STATE() { return {ratings}; }
+function adoptState(s) {
+  if (s && s.ratings) {
+    ratings = s.ratings;
+    localStorage.setItem(KEY, JSON.stringify(ratings));
   }
-  table.appendChild(tbody);
-  root.appendChild(table);
 }
-
-function save(el) {
-  const id = el.dataset.id, dim = el.dataset.dim;
-  ratings[id] = ratings[id] || {};
-  ratings[id][dim] = el.value;
-  localStorage.setItem(KEY, JSON.stringify(ratings));
-}
-function toggleReveal() {
-  document.body.classList.toggle("revealed");
-}
-function exportRatings() {
+function buildExport() {
   const sha = {};
   for (const g of DATA.groups)
     for (const s of g.items) sha[s.case_id] = s.sha256 || null;
   const out = {};
   for (const [id, r] of Object.entries(ratings))
     out[id] = {...r, output_sha256: sha[id] || null};
-  const blob = new Blob([JSON.stringify({
-    experiment_id: DATA.experiment_id,
-    page: location.pathname,
-    exported_at: new Date().toISOString(),
-    ratings: out,
-  }, null, 2)], {type: "application/json"});
+  return {experiment_id: DATA.experiment_id, page: location.pathname,
+          saved_at: new Date().toISOString(), ratings: out};
+}
+function setSaved(t) {
+  const e = document.getElementById("saved");
+  if (e) e.textContent = t;
+}
+function persist() {
+  localStorage.setItem(KEY, JSON.stringify(STATE()));
+  push();
+}
+function push() {
+  if (!remoteOK) return;
+  clearTimeout(_pt);
+  _pt = setTimeout(async () => {
+    try {
+      await fetch("/api/listen-ratings", {method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({name: RATINGS_NAME,
+          data: buildExport(), state: STATE()})});
+      setSaved("已写入 listen/" + RATINGS_NAME + " ✓");
+    } catch (e) {
+      remoteOK = false;
+      setSaved("服务断开，改动暂存浏览器");
+    }
+  }, 250);
+}
+function render() {
+  document.getElementById("meta").textContent = DATA.meta;
+  const root = document.getElementById("groups");
+  for (const g of DATA.groups) {
+    const h = document.createElement("h2");
+    h.textContent = g.title;
+    root.appendChild(h);
+    const table = document.createElement("table");
+    table.innerHTML = `<thead><tr>
+      <th>样本</th><th>播放</th>
+      <th>清澈度<br>1-5</th><th>磨砂/颗粒<br>1-5</th><th>像角色<br>1-5</th>
+      <th>自然度<br>1-5</th><th>文本完整</th><th>异常类型</th><th>备注</th>
+    </tr></thead>`;
+    const tbody = document.createElement("tbody");
+    for (const s of g.items) {
+      const r = ratings[s.case_id] || {};
+      const tr = document.createElement("tr");
+      const sel = (dim) =>
+        `<select data-id="${s.case_id}" data-dim="${dim}" onchange="save(this)">
+           <option value=""></option>` +
+        [1,2,3,4,5].map(v =>
+          `<option value="${v}" ${r[dim] == v ? "selected" : ""}>${v}</option>`
+        ).join("") + `</select>`;
+      const tc = (dim, opts) =>
+        `<select class="wide" data-id="${s.case_id}" data-dim="${dim}"
+           onchange="save(this)"><option value=""></option>` +
+        opts.map(v =>
+          `<option value="${v}" ${r[dim] == v ? "selected" : ""}>${v}</option>`
+        ).join("") + `</select>`;
+      const txt = (dim, ph) =>
+        `<input type="text" data-id="${s.case_id}" data-dim="${dim}"
+           placeholder="${ph || ''}"
+           value="${(r[dim] || "").replace(/"/g, "&quot;")}"
+           onchange="save(this)">`;
+      const audioCell = s.src
+        ? `<audio controls preload="none" src="${s.src}"></audio>
+           <div class="sub">${s.duration}s · ${s.sample_rate}Hz</div>`
+        : `<div class="fail">${s.error || "无输出"}</div>`;
+      tr.innerHTML =
+        `<td><div class="sample-label">${s.label}</div>
+             <div class="identity">${s.case_id}</div></td>
+         <td>${audioCell}</td>
+         <td>${sel("clarity")}</td><td>${sel("grit")}</td>
+         <td>${sel("likeness")}</td><td>${sel("naturalness")}</td>
+         <td>${tc("text_complete", ["是", "否", "待审"])}</td>
+         <td>${txt("artifact_type", "如:吞字/电流")}</td>
+         <td>${txt("notes")}</td>`;
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    root.appendChild(table);
+  }
+}
+async function boot() {
+  try {
+    const r = await fetch("/api/listen-ratings?name=" + RATINGS_NAME);
+    remoteOK = true;
+    if (r.ok) {
+      const d = await r.json();
+      if (d.state) adoptState(d.state);
+    }
+  } catch (e) {}
+  if (!Object.keys(ratings).length)
+    try { ratings = JSON.parse(localStorage.getItem(KEY) || "{}"); }
+    catch (e) {}
+  setSaved(remoteOK ? "已连接 serve_review.py — 改动即写盘"
+                    : "未连接 serve_review.py — 改动暂存浏览器");
+  render();
+}
+function save(el) {
+  const id = el.dataset.id, dim = el.dataset.dim;
+  ratings[id] = ratings[id] || {};
+  ratings[id][dim] = el.value;
+  persist();
+}
+function toggleReveal() {
+  document.body.classList.toggle("revealed");
+}
+function exportRatings() {
+  const blob = new Blob([JSON.stringify(buildExport(), null, 2)],
+                        {type: "application/json"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "listen-ratings-phase5a.json";
+  a.download = RATINGS_NAME;
   a.click();
 }
 function clearRatings() {
   if (!confirm("清除本页所有已保存评分？")) return;
   ratings = {};
   localStorage.removeItem(KEY);
+  push();
   location.reload();
 }
+boot();
 </script>
 </body>
 </html>
@@ -414,12 +522,13 @@ _LORA_PILOT_TEMPLATE = """<!DOCTYPE html>
 <h1>__TITLE__</h1>
 <div class="meta" id="meta"></div>
 <div class="toolbar">
-  <button onclick="exportRatings()">导出评价 JSON</button>
+  <button onclick="exportRatings()">备用导出 JSON</button>
   <button class="secondary" onclick="toggleReveal()">解盲/隐藏真实标签</button>
   <button class="secondary" onclick="location.hash='calib'">回到参考校准</button>
   <button class="fatigue" onclick="markFatigue()">听麻木了/分不出来
     (UNCERTAIN_FATIGUE)</button>
   <button class="secondary" onclick="clearRatings()">清空</button>
+  <span id="saved" class="sub">连接本地服务…</span>
   <span class="sub">每对先听哪边是随机且隐藏的；不要回放到听习惯为止——
     第一次听到就可以标记缺陷。疲劳请直接点橙色按钮停止，不要把
     「无差异」当疲劳。</span>
@@ -435,25 +544,78 @@ _LORA_PILOT_TEMPLATE = """<!DOCTYPE html>
 <script>
 const DATA = __SAMPLES__;
 const KEY = "tts-lora-pilot-" + location.pathname;
+const RATINGS_NAME = "listen-ratings-lora-pilot.json";
 let ratings = {}, session = {};
-try {
-  const saved = JSON.parse(localStorage.getItem(KEY) || "{}");
-  ratings = saved.ratings || {}; session = saved.session || {};
-} catch (e) {}
-document.getElementById("meta").textContent = DATA.meta;
-if (session.fatigue) document.body.classList.add("stopped");
-
+let remoteOK = false, _pt = null;
+function STATE() { return {ratings, session}; }
+function adoptState(s) {
+  if (!s) return;
+  ratings = s.ratings || {}; session = s.session || {};
+  localStorage.setItem(KEY, JSON.stringify(STATE()));
+}
+function buildExport() {
+  const pairs = {};
+  for (const pack of DATA.packs)
+    for (const pair of pack.pairs) {
+      const r = ratings[pair.pair_id];
+      const blind = {};
+      pair.sides.forEach((s, i) => blind[i === 0 ? "A" : "B"] = s.case_id);
+      pairs[pair.pair_id] = {
+        batch: pack.pack_id,
+        blind_order: blind,
+        ...(r ? {...r,
+          choice_real: r.choice === "A" ? blind.A :
+                       r.choice === "B" ? blind.B : r.choice || null}
+        : {status: session.fatigue ? "UNCERTAIN_FATIGUE"
+                                   : "PENDING_USER_LISTENING"}),
+      };
+    }
+  return {
+    experiment_id: DATA.experiment_id,
+    page: location.pathname,
+    saved_at: new Date().toISOString(),
+    session: {fatigue: !!session.fatigue,
+              started_at: session.started_at || null,
+              stopped_at: session.stopped_at || null},
+    truth: DATA.truth,
+    pairs,
+  };
+}
+function setSaved(t) {
+  const e = document.getElementById("saved");
+  if (e) e.textContent = t;
+}
 function persist() {
-  localStorage.setItem(KEY, JSON.stringify({ratings, session}));
+  localStorage.setItem(KEY, JSON.stringify(STATE()));
+  push();
+}
+function push() {
+  if (!remoteOK) return;
+  clearTimeout(_pt);
+  _pt = setTimeout(async () => {
+    try {
+      await fetch("/api/listen-ratings", {method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({name: RATINGS_NAME,
+          data: buildExport(), state: STATE()})});
+      setSaved("已写入 listen/" + RATINGS_NAME + " ✓");
+    } catch (e) {
+      remoteOK = false;
+      setSaved("服务断开，改动暂存浏览器");
+    }
+  }, 250);
 }
 function markFatigue() {
   session.fatigue = true;
   session.stopped_at = new Date().toISOString();
   persist();
   document.body.classList.add("stopped");
-  alert("已记录 UNCERTAIN_FATIGUE。可以直接导出并停止本轮——疲劳样本不计入胜负。");
+  alert("已记录 UNCERTAIN_FATIGUE。已自动写盘，可以停止本轮——疲劳样本不计入胜负。");
 }
 
+function render() {
+document.getElementById("meta").textContent = DATA.meta;
+if (session.fatigue) document.body.classList.add("stopped");
 const root = document.getElementById("packs");
 for (const pack of DATA.packs) {
   const wrap = document.createElement("div");
@@ -547,6 +709,7 @@ for (const pack of DATA.packs) {
   root.appendChild(wrap);
 }
 updateProgress();
+}
 
 function touch(pair_id) {
   ratings[pair_id] = ratings[pair_id] || {};
@@ -570,45 +733,41 @@ function updateProgress() {
 }
 function toggleReveal() { document.body.classList.toggle("revealed"); }
 function exportRatings() {
-  const pairs = {};
-  for (const pack of DATA.packs)
-    for (const pair of pack.pairs) {
-      const r = ratings[pair.pair_id];
-      const blind = {};
-      pair.sides.forEach((s, i) => blind[i === 0 ? "A" : "B"] = s.case_id);
-      pairs[pair.pair_id] = {
-        batch: pack.pack_id,
-        blind_order: blind,
-        ...(r ? {...r,
-          choice_real: r.choice === "A" ? blind.A :
-                       r.choice === "B" ? blind.B : r.choice || null}
-        : {status: session.fatigue ? "UNCERTAIN_FATIGUE"
-                                   : "PENDING_USER_LISTENING"}),
-      };
-    }
-  const blob = new Blob([JSON.stringify({
-    experiment_id: DATA.experiment_id,
-    page: location.pathname,
-    exported_at: new Date().toISOString(),
-    session: {fatigue: !!session.fatigue,
-              started_at: session.started_at || null,
-              stopped_at: session.stopped_at || null},
-    truth: DATA.truth,
-    pairs,
-  }, null, 2)], {type: "application/json"});
+  const blob = new Blob([JSON.stringify(buildExport(), null, 2)],
+                        {type: "application/json"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "listen-ratings-lora-pilot.json";
+  a.download = RATINGS_NAME;
   a.click();
 }
 function clearRatings() {
   if (!confirm("清除本页所有已保存评价？")) return;
   ratings = {}; session = {};
   localStorage.removeItem(KEY);
+  push();
   location.reload();
 }
-session.started_at = session.started_at || new Date().toISOString();
-persist();
+async function boot() {
+  try {
+    const r = await fetch("/api/listen-ratings?name=" + RATINGS_NAME);
+    remoteOK = true;
+    if (r.ok) {
+      const d = await r.json();
+      if (d.state) adoptState(d.state);
+    }
+  } catch (e) {}
+  if (!Object.keys(ratings).length && !Object.keys(session).length)
+    try {
+      const saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+      ratings = saved.ratings || {}; session = saved.session || {};
+    } catch (e) {}
+  session.started_at = session.started_at || new Date().toISOString();
+  localStorage.setItem(KEY, JSON.stringify(STATE()));
+  setSaved(remoteOK ? "已连接 serve_review.py — 改动即写盘"
+                    : "未连接 serve_review.py — 改动暂存浏览器");
+  render();
+}
+boot();
 </script>
 </body>
 </html>
@@ -723,6 +882,7 @@ def write_phase5a_listen_page(output_dir: str | Path,
     page = _PHASE5A_TEMPLATE.replace(
         "__TITLE__", html.escape(
             f"Phase 5A 盲听 — {manifest.get('experiment_id')}")).replace(
+        "__RATINGS_NAME__", "listen-ratings-phase5a.json").replace(
         "__SAMPLES__", json.dumps(payload, ensure_ascii=False))
     out = listen_dir / "index.html"
     out.write_text(page, encoding="utf-8")
@@ -920,6 +1080,7 @@ def write_phase5a2_listen_page(output_dir: str | Path,
     page = _PHASE5A_TEMPLATE.replace(
         "__TITLE__", html.escape(
             f"Phase 5A2 配对盲听 — {manifest.get('experiment_id')}")).replace(
+        "__RATINGS_NAME__", "listen-ratings-phase5a2.json").replace(
         "__SAMPLES__", json.dumps(payload, ensure_ascii=False))
     out = listen_dir / "index.html"
     out.write_text(page, encoding="utf-8")

@@ -8,8 +8,9 @@
 
 Clips are copied into <out-dir>/audio/ so the bundle is portable.
 
-Open review.html, mark drops, export decisions.json, then pass it to
-freeze_dataset.py --exclude-file.
+Serve the bundle with scripts/ingest/serve_review.py — clicks POST
+straight to <out-dir>/decisions.json (no export step). Pass that file
+to freeze_dataset.py --exclude-file.
 """
 from __future__ import annotations
 

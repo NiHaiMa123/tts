@@ -117,6 +117,125 @@ def test_load_decisions(tmp_path):
     assert load_decisions(p) == {"a", "b"}
 
 
+def test_refpick_page_sorted_and_served(tmp_path):
+    from character_tts.ingest.review import build_refpick_page
+    pool = tmp_path / "pool"
+    index = tmp_path / "idx.jsonl"
+    rows = []
+    for i, (cos, txt) in enumerate([(0.9, "甲"), (0.5, "乙"),
+                                    (0.95, "丙")]):
+        w = _wav(pool / f"a{i}.wav", freq=200 + i * 100)
+        rows.append({"source": f"s{i}.wav", "status": "ok",
+                     "audio": f"a{i}.wav",
+                     "audio_sha256": f"{i}" * 64, "text": txt,
+                     "label": "中立_neutral",
+                     "flags": [f"speaker_cos:{cos}"],
+                     "metrics": {"duration_s": 1.0}})
+    index.write_text("\n".join(json.dumps(r, ensure_ascii=False)
+                               for r in rows) + "\n", encoding="utf-8")
+    out = tmp_path / "bundle"
+    html = build_refpick_page(index, pool, out, char_id="testchar",
+                              top_n=2)
+    page = html.read_text(encoding="utf-8")
+    assert "/api/ref-pick" in page
+    assert '"char": "testchar"' not in page  # embedded via const CHAR
+    assert 'const CHAR = "testchar"' in page
+    # top-2 by cos kept, sorted desc: cos .95 row first
+    assert page.index("丙") < page.index("甲")
+    assert "乙" not in page
+    assert len(list((out / "audio").glob("*.wav"))) == 2
+
+
+def test_serve_review_endpoints(tmp_path):
+    import importlib.util
+    import threading
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    spec = importlib.util.spec_from_file_location(
+        "serve_review", REPO / "scripts" / "ingest" / "serve_review.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    bundle = tmp_path / "bundle"
+    (bundle / "audio").mkdir(parents=True)
+    (bundle / "listen").mkdir()
+    wav = _wav(bundle / "audio" / "a.wav")
+    (bundle / "review.html").write_text("<html></html>",
+                                        encoding="utf-8")
+
+    root = tmp_path / "root"
+    cfg_dir = root / "configs" / "characters"
+    cfg_dir.mkdir(parents=True)
+    (cfg_dir / "testchar.yaml").write_text(
+        "character_id: testchar\nbackend: voxcpm2\n"
+        "reference:\n  audio: ''\n  sha256: ''\n  text: ''\n",
+        encoding="utf-8")
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0),
+                              mod.make_handler(bundle, root))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_address[1]
+    try:
+        def post(path, payload):
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{port}{path}",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"})
+            try:
+                return json.loads(urllib.request.urlopen(req).read())
+            except urllib.error.HTTPError as e:
+                return json.loads(e.read())
+
+        r = post("/api/decisions",
+                 {"drop": ["s1"], "tags": {"s2": ["noisy"]}})
+        assert r["ok"]
+        dec = json.loads((bundle / "decisions.json")
+                         .read_text(encoding="utf-8"))
+        assert dec["drop"] == ["s1"]
+        assert dec["tags"]["s2"] == ["noisy"]
+
+        r = post("/api/ref-pick", {"char": "testchar",
+                                   "audio": "a.wav", "sha": "s",
+                                   "text": "台词"})
+        assert r["ok"] and r["yaml_updated"]
+        ref = root / "assets" / "characters" / "testchar" / \
+            "reference" / "ref.wav"
+        assert ref.read_bytes() == wav.read_bytes()
+        choice = json.loads((ref.parent / "ref_choice.json")
+                            .read_text(encoding="utf-8"))
+        assert choice["char"] == "testchar"
+        y = (cfg_dir / "testchar.yaml").read_text(encoding="utf-8")
+        assert "台词" in y and r["sha256"] in y
+
+        # listen page ratings: direct write + restore round-trip
+        r = post("/api/listen-ratings", {
+            "name": "listen-ratings-phase5a.json",
+            "data": {"experiment_id": "e", "ratings": {"c1": {"likeness": 4}}},
+            "state": {"ratings": {"c1": {"likeness": 4}}}})
+        assert r["ok"]
+        saved = json.loads((bundle / "listen" /
+                            "listen-ratings-phase5a.json")
+                           .read_text(encoding="utf-8"))
+        assert saved["ratings"]["c1"]["likeness"] == 4
+        st = json.loads(urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/api/listen-ratings"
+            "?name=listen-ratings-phase5a.json").read())
+        assert st["state"]["ratings"]["c1"]["likeness"] == 4
+        bad = post("/api/listen-ratings",
+                   {"name": "../evil.json", "data": {}, "state": {}})
+        assert bad["ok"] is False
+
+        # path traversal blocked
+        import urllib.error
+        with pytest.raises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/../idx.jsonl")
+        assert e.value.code == 404
+    finally:
+        srv.shutdown()
+
+
 # ---------- provenance / import / audit / enrich ----------
 
 def test_numeric_suffix_is_no_text(tmp_path):
