@@ -36,6 +36,8 @@ class VoxCPMWorker(WorkerServer):
         self.generation_cfg = cfg.get("generation") or {}
         self._model = None
         self._torch = None
+        self._prompt_cache = None
+        self._prompt_cache_key = None
 
     def _load(self):
         if self._model is not None:
@@ -136,15 +138,23 @@ class VoxCPMWorker(WorkerServer):
         gen = dict(self.generation_cfg)
         gen.update(options)
 
+        prompt_wav = params.get("reference_audio") or None
+        prompt_text = params.get("reference_text") or None
         call_kwargs = {
             "text": str(params["text"]),
-            "prompt_wav_path": params.get("reference_audio") or None,
-            "prompt_text": params.get("reference_text") or None,
+            "prompt_wav_path": prompt_wav,
+            "prompt_text": prompt_text,
             "cfg_value": gen.get("cfg_value", 2.0),
             "inference_timesteps": int(gen.get("inference_timesteps", 10)),
             "normalize": bool(gen.get("normalize", True)),
             "denoise": bool(gen.get("denoise", False)),
             "retry_badcase": bool(gen.get("retry_badcase", True)),
+            "min_len": int(gen.get("min_len", 2)),
+            "max_len": int(gen.get("max_len", 4096)),
+            "retry_badcase_max_times": int(
+                gen.get("retry_badcase_max_times", 3)),
+            "retry_badcase_ratio_threshold": float(
+                gen.get("retry_badcase_ratio_threshold", 6.0)),
         }
         # Public generate() is (*args, **kwargs) -> ndarray; the real
         # signature lives on _generate().
@@ -162,6 +172,17 @@ class VoxCPMWorker(WorkerServer):
         output_path = Path(params["output_path"])
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Prompt-cache fast path: identical math to generate(), but the
+        # reference audio + prompt text are encoded once per character
+        # instead of once per file.
+        tts_model = getattr(model, "tts_model", None)
+        cacheable = (
+            tts_model is not None
+            and hasattr(tts_model, "build_prompt_cache")
+            and hasattr(tts_model, "generate_with_prompt_cache")
+            and not call_kwargs.get("denoise")
+        )
+        cache_state = "bypass"
         # voxcpm logs "Badcase detected" to stderr when retry_badcase
         # re-rolls a bad generation; capture it so we can report the real
         # retry count instead of claiming first-pass success.
@@ -170,12 +191,19 @@ class VoxCPMWorker(WorkerServer):
         errbuf = io.StringIO()
         t0 = time.monotonic()
         with contextlib.redirect_stderr(errbuf):
-            wav = model.generate(**call_kwargs)
+            if cacheable:
+                wav, cache_state = self._generate_cached(
+                    model, str(params["text"]), prompt_wav, prompt_text,
+                    call_kwargs)
+            else:
+                wav = model.generate(**call_kwargs)
         wall = time.monotonic() - t0
         retry_count = errbuf.getvalue().count("Badcase detected")
 
         sr = int(getattr(getattr(model, "tts_model", model), "sample_rate",
                          getattr(model, "sample_rate", 48000)))
+        if hasattr(wav, "detach"):          # cached path returns tensor
+            wav = wav.detach().float().cpu().numpy()
         wav_np = np.asarray(wav, dtype=np.float32).squeeze()
         sf.write(str(output_path), wav_np, sr)
         return {
@@ -186,11 +214,67 @@ class VoxCPMWorker(WorkerServer):
             "metadata": {
                 "seed": seed,
                 "generation": call_kwargs,
+                "prompt_cache": cache_state,
                 "retry_badcase_enabled": bool(call_kwargs.get(
                     "retry_badcase", True)),
                 "retry_count": retry_count,
             },
         }
+
+    def _generate_cached(self, model, text: str, prompt_wav, prompt_text,
+                         call_kwargs: dict):
+        """generate() equivalent via a reusable prompt cache.
+
+        Builds ``tts_model.build_prompt_cache`` once per
+        (audio path+mtime, prompt text); every later call goes straight to
+        ``_generate_with_prompt_cache`` — the reference encode + LM prefill
+        is skipped, output is unchanged.
+        """
+        import re
+        tts_model = model.tts_model
+        key = None
+        if prompt_wav:
+            try:
+                key = (str(Path(prompt_wav).resolve()),
+                       Path(prompt_wav).stat().st_mtime_ns, prompt_text)
+            except OSError:
+                key = None
+        state = "hit"
+        if key is None or key != self._prompt_cache_key:
+            pcache = tts_model.build_prompt_cache(
+                prompt_text=prompt_text, prompt_wav_path=prompt_wav,
+                reference_wav_path=None) \
+                if (prompt_wav or prompt_text) else None
+            self._prompt_cache = pcache
+            self._prompt_cache_key = key
+            state = "miss" if pcache is not None else "none"
+        pcache = self._prompt_cache
+
+        text = re.sub(r"\s+", " ", text.replace("\n", " "))
+        if call_kwargs.get("normalize"):
+            if model.text_normalizer is None:
+                from voxcpm.utils.text_normalize import TextNormalizer
+                model.text_normalizer = TextNormalizer()
+            text = model.text_normalizer.normalize(text)
+
+        from voxcpm.model.utils import next_and_close
+        wav, _txt_tok, _feats = next_and_close(
+            tts_model._generate_with_prompt_cache(
+                target_text=text,
+                prompt_cache=pcache,
+                min_len=call_kwargs.get("min_len", 2),
+                max_len=call_kwargs.get("max_len", 4096),
+                inference_timesteps=call_kwargs.get(
+                    "inference_timesteps", 10),
+                cfg_value=call_kwargs.get("cfg_value", 2.0),
+                retry_badcase=call_kwargs.get("retry_badcase", True),
+                retry_badcase_max_times=call_kwargs.get(
+                    "retry_badcase_max_times", 3),
+                retry_badcase_ratio_threshold=call_kwargs.get(
+                    "retry_badcase_ratio_threshold", 6.0),
+                streaming=False,
+            ))
+        return wav, state
 
     def handle_codec_roundtrip(self, params: dict) -> dict:
         """Real AudioVAE encode->decode when the model exposes it."""

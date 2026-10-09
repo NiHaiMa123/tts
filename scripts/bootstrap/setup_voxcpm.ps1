@@ -16,6 +16,12 @@ Install-Packages -PythonExe $py -Packages @(
     "voxcpm", "soundfile", "huggingface_hub[cli]"
 )
 
+# triton-windows enables torch.compile for the AR decoder (~2.5x faster
+# inference); without it voxcpm silently runs uncompiled eager mode.
+Install-Packages -PythonExe $py -Packages @(
+    "triton-windows==3.5.1.post21"
+)
+
 if (-not $SkipDownload) {
     $cacheDir = Join-Path $Script:RepoRoot "hf_cache\voxcpm2"
     # Revision pinned to match configs/backends/voxcpm2.yaml.

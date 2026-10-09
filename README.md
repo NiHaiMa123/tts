@@ -110,7 +110,10 @@ uv pip install --python .venv/Scripts/python.exe -e ".[metrics,web,dev]"
 #   TTS_MODEL_ROOT=E:/project/tts/hf_cache
 
 # 后端 env（按需）
-powershell -File scripts/bootstrap/setup_voxcpm.ps1     # 锁暝生产环境
+powershell -File scripts/bootstrap/setup_voxcpm.ps1     # 锁暝/爱弥斯生产环境
+#   ↑ 含 triton-windows：开启 torch.compile，推理约快 2.5x（同模型同数学，
+#   非逐比特一致）；缺它则静默退回 eager 慢速模式。首次启动编译 ~2min，
+#   之后走 inductor 缓存很快。
 powershell -File scripts/bootstrap/setup_qwen3_tts.ps1
 
 # ASR 辅助检查 env（三套，仅辅助证据用；均 py3.12）
