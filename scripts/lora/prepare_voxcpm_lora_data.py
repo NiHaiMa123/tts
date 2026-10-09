@@ -41,6 +41,11 @@ MIN_ACCEPT_SECONDS = 120.0
 MIN_DUR, MAX_DUR = 0.4, 90.0
 SIM_REJECT = 0.85        # near-dup text similarity vs blocklist
 VAL_ROWS = 8             # rows reserved for val-loss logging only
+# suoming 的 phase5a/5a2 评测有独立冻结配置；其他角色以角色 yaml 的
+# evaluation.anchor_texts 为评测资产。
+DEFAULT_EVAL_CONFIGS = {
+    "suoming": ("suoming_voxcpm_phase5a", "suoming_voxcpm_phase5a2"),
+}
 
 _PUNCT = re.compile(r"[\s，。！？、；：「」『』（）《》…—\-,.!?;:\"'~·]")
 
@@ -104,7 +109,12 @@ def build_blocklist(character_id: str = "suoming") -> dict:
         sha=character.reference_sha256,
         text=character.reference.get("text"))
 
-    for cfg_name in ("suoming_voxcpm_phase5a", "suoming_voxcpm_phase5a2"):
+    # 角色 yaml 的评测锚点（含 ground truth 外的其余锚点）
+    for a in character.anchor_texts:
+        add(f"anchor_{a.id}", audio=a.audio, sha=a.sha256, text=a.text,
+            fid=(a.source or "").split("fid=")[-1] or None)
+
+    for cfg_name in DEFAULT_EVAL_CONFIGS.get(character_id, ()):
         cfg = load_phase5a_config(cfg_name)
         for p in cfg.get("prompts") or []:
             add(f"prompt_{p['id']}", audio=p.get("audio"),
@@ -267,20 +277,31 @@ def prepare(train_jsonl: Path, val_jsonl: Path, blocklist: dict,
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--train-manifest",
-                    default=str(DATA_V1 / "train.jsonl"))
-    ap.add_argument("--val-manifest",
-                    default=str(DATA_V1 / "validation.jsonl"))
-    ap.add_argument("--out-dir",
-                    default="outputs/training/suoming_voxcpm_lora_pilot")
+    ap.add_argument("--character", default="suoming")
+    ap.add_argument("--train-manifest", default=None,
+                    help="default: 角色 yaml dataset.train_manifest")
+    ap.add_argument("--val-manifest", default=None,
+                    help="default: 角色 yaml dataset.validation_manifest")
+    ap.add_argument("--out-dir", default=None,
+                    help="default: outputs/training/<char>_voxcpm_lora_pilot")
     args = ap.parse_args()
 
-    out_dir = Path(args.out_dir)
+    character = load_character(args.character)
+    ds = character.dataset or {}
+    train_manifest = (args.train_manifest
+                      or ds.get("train_manifest")
+                      or str(DATA_V1 / "train.jsonl"))
+    val_manifest = (args.val_manifest
+                    or ds.get("validation_manifest")
+                    or str(DATA_V1 / "validation.jsonl"))
+    out_dir = Path(args.out_dir
+                   or f"outputs/training/{args.character}"
+                      "_voxcpm_lora_pilot")
     if not out_dir.is_absolute():
         out_dir = repo_root() / out_dir
-    blocklist = build_blocklist()
-    stats = prepare(_resolve_repo(args.train_manifest),
-                    _resolve_repo(args.val_manifest),
+    blocklist = build_blocklist(args.character)
+    stats = prepare(_resolve_repo(train_manifest),
+                    _resolve_repo(val_manifest),
                     blocklist, out_dir)
     print(json.dumps(stats, ensure_ascii=False, indent=2))
     return 0 if stats["decision"] == "ok" else 3

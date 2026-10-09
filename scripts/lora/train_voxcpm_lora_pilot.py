@@ -34,6 +34,8 @@ TRAIN_PY = ROOT / "backend_envs/voxcpm2_train/Scripts/python.exe"
 OFFICIAL = ROOT / "backend_envs/voxcpm2/official_v203/train_voxcpm_finetune.py"
 CONFIG = ROOT / "configs/training/suoming_voxcpm_lora_pilot.yaml"
 OUT = ROOT / "outputs/training/suoming_voxcpm_lora_pilot"
+_CFG_PATH = CONFIG      # 运行期实际值由 --config/--out 覆盖
+_OUT_DIR = OUT
 MAX_OPT_STEPS = 150
 EXPECTED_CKPTS = ["step_0000050", "step_0000100", "step_0000150"]
 _FAIL_PATTERNS = [
@@ -44,7 +46,7 @@ _FAIL_PATTERNS = [
 
 
 def _load_cfg() -> dict:
-    return yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
+    return yaml.safe_load(_CFG_PATH.read_text(encoding="utf-8"))
 
 
 def _sm_sample_vram(stop: threading.Event, samples: list[int],
@@ -136,18 +138,30 @@ def main() -> int:
                          "only if checkpoints are kept (they are not).")
     ap.add_argument("--oom-fallback", action="store_true",
                     help="single documented fallback: max_batch_tokens 4096")
+    ap.add_argument("--config", default=str(CONFIG),
+                    help="训练 yaml（默认锁暝 pilot 配置）")
+    ap.add_argument("--out", default=str(OUT),
+                    help="产物目录（默认锁暝 pilot 目录）")
     args = ap.parse_args()
+
+    global _CFG_PATH, _OUT_DIR
+    _CFG_PATH = Path(args.config)
+    if not _CFG_PATH.is_absolute():
+        _CFG_PATH = ROOT / _CFG_PATH
+    _OUT_DIR = Path(args.out)
+    if not _OUT_DIR.is_absolute():
+        _OUT_DIR = ROOT / _OUT_DIR
 
     run_log = {"script": OFFICIAL.name,
                "official_commit": "19b6bf7590025418821a86dcb817504e0ad7e5df",
-               "config": str(CONFIG)}
+               "config": str(_CFG_PATH)}
     print("[preflight]", flush=True)
     pf = _preflight()
     run_log["preflight"] = pf
     print(" ", pf)
     if not pf["ok"]:
         run_log["status"] = "API_BLOCKED"
-        (OUT / "run_log.json").write_text(
+        (_OUT_DIR / "run_log.json").write_text(
             json.dumps(run_log, indent=2), encoding="utf-8")
         return 4
 
@@ -165,19 +179,19 @@ def main() -> int:
         cfg = dict(base_cfg)
         cfg.update(num_iters=2, save_interval=10_000,
                    valid_interval=10_000, log_interval=1,
-                   save_path=str(OUT / "smoke_checkpoints"),
-                   tensorboard=str(OUT / "smoke_tb"),
+                   save_path=str(_OUT_DIR / "smoke_checkpoints"),
+                   tensorboard=str(_OUT_DIR / "smoke_tb"),
                    warmup_steps=1, max_steps=2)
-        smoke_yaml = OUT / "smoke_config.yaml"
-        OUT.mkdir(parents=True, exist_ok=True)
+        smoke_yaml = _OUT_DIR / "smoke_config.yaml"
+        _OUT_DIR.mkdir(parents=True, exist_ok=True)
         smoke_yaml.write_text(yaml.safe_dump(cfg, allow_unicode=True,
                                              sort_keys=False),
                               encoding="utf-8")
-        res = _run_official(smoke_yaml, "smoke", OUT / "logs/smoke.log")
+        res = _run_official(smoke_yaml, "smoke", _OUT_DIR / "logs/smoke.log")
         run_log["smoke"] = res
         res["status"] = ("ok" if res["returncode"] == 0
                          and not res["failures"] else "failed")
-        (OUT / "run_log.json").write_text(
+        (_OUT_DIR / "run_log.json").write_text(
             json.dumps(run_log, indent=2, ensure_ascii=False),
             encoding="utf-8")
         print(json.dumps(res, ensure_ascii=False, indent=2))
@@ -190,12 +204,12 @@ def main() -> int:
         tag = "oom_fallback_mbt4096"
         run_log["oom_fallback"] = ("max_batch_tokens 8192->4096 "
                                    "(official length filter)")
-    run_yaml = OUT / "run_config.yaml"
-    OUT.mkdir(parents=True, exist_ok=True)
+    run_yaml = _OUT_DIR / "run_config.yaml"
+    _OUT_DIR.mkdir(parents=True, exist_ok=True)
     run_yaml.write_text(yaml.safe_dump(cfg, allow_unicode=True,
                                        sort_keys=False), encoding="utf-8")
 
-    res = _run_official(run_yaml, tag, OUT / "logs/train.log")
+    res = _run_official(run_yaml, tag, _OUT_DIR / "logs/train.log")
     run_log["train"] = res
     run_log["checkpoints"] = _checkpoints_ok(ckpt_dir)
     run_log["steps_completed"] = _steps_completed(ckpt_dir)
@@ -208,7 +222,7 @@ def main() -> int:
     elif not all(run_log["checkpoints"].values()):
         status = "CHECKPOINT_INCOMPLETE"
     run_log["status"] = status
-    (OUT / "run_log.json").write_text(
+    (_OUT_DIR / "run_log.json").write_text(
         json.dumps(run_log, indent=2, ensure_ascii=False), encoding="utf-8")
     print(json.dumps(run_log, ensure_ascii=False, indent=2))
     return 0 if status == "ok" else 7

@@ -57,10 +57,11 @@ scripts/
   eval/                       # 评测/实验 runner + 评分导出
     run_gate.py  run_voxcpm_phase5a.py  run_voxcpm_phase5a2.py
     export_*_ratings.py
-  lora/                       # LoRA pilot 工具链（已关闭，留作复用）
+  lora/                       # LoRA 训练工具链（通用化，--character 参数化）
     prepare_voxcpm_lora_data.py  train_voxcpm_lora_pilot.py
     run_voxcpm_lora_eval.py  eval_voxcpm_lora_env.py
     audit_voxcpm_lora_effect.py
+                              # 流程见 docs/pipelines/lora-training.md
   bootstrap/                  # 后端 env 安装脚本
 tests/
   conftest.py  fake_worker.py # 共享 fixture + 假 worker
@@ -154,6 +155,8 @@ uv pip install --python backend_envs/asr_qwen3/Scripts/python.exe \
    `dataset` + `evaluation.anchor_texts`（`reference` 可先留空）
 3. **选参考音**（网页点选，直接写盘，见下节）
 4. WebUI 下拉自动出现，无需改代码
+5. （可选）零样本相似度不够时训 LoRA：**`docs/pipelines/lora-training.md`**
+   ——数据准备→训练→盲听 A/B，人耳确认增益才转正 adapter
 
 ## 试听/审核网页（统一交互：点击即写盘，不导 json）
 
