@@ -37,10 +37,17 @@ FNV-1a 32 位哈希：
 data/characters/<id>/inbox/<情绪_标签>/【<情绪>】<台词>.wav
 ```
 
-锁暝现状：161 条（中立_neutral），已按 v1 数据集回剪——每条有
-`provenance.jsonl` 记录 v1 台词/标签/split + 源 sha256。文件名约定
-`【标签】台词原文.wav`；编号导出 `【标签】_<n>.wav` 与哈希命名
-`<hash>.wav` 视为无文本，由 provenance sidecar 或 ASR 补。
+现有 inbox：
+
+| 角色 | 条数 | 筛选依据 | provenance |
+|---|---|---|---|
+| suoming 锁暝 | 161 | v1 冻结集回剪 | v1 台词/标签/split |
+| shouanren 守岸人 | 262 | shouanren_v2 freeze（256 资产，6 条内容重复） | split |
+| fuxuan 符玄 | 273 | fuxuan_v1 freeze（四情绪） | split |
+| aimisi 爱弥斯 | 223 | 人工「可以/」目录 | reviewed=可以 |
+
+文件名约定 `【标签】台词原文.wav`；编号导出 `【标签】_<n>.wav` 与
+哈希命名 `<hash>.wav` 视为无文本，由 provenance sidecar 或 ASR 补。
 
 ## ③ 入库管线（`src/character_tts/ingest/` + `scripts/ingest/`）
 

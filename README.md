@@ -32,8 +32,8 @@ assets/characters/<id>/       # 角色轻资产（进 git 的只有 stub/文档�
   adapters/<backend>/<name>/  # 预留：转正后的 LoRA 放这（gitignored）
   postprocess.yaml            # 预留：后处理链配置（未实现）
 data/characters/<id>/         # 角色重资产（gitignored）
-  inbox/                      # 原始源音频（锁暝 161 条，已按 v1 回剪
-                              #   + provenance.jsonl 挂台词/来源）
+  inbox/                      # 筛选后源音频 + provenance.jsonl
+                              #   锁暝161 守岸人262 符玄273 爱弥斯223
   datasets/v1/                # train/val/test jsonl + audio/ 自包含音频
 src/character_tts/
   registry/                   # YAML 加载、${ENV}/${TTS_ROOT} 展开、模型
