@@ -4,4 +4,6 @@ paths:
 
 defaults:
   character: suoming
-  backend: dots_legacy
+  # Production default: VoxCPM2 zero-shot (user decision 2026-10-08,
+  # LoRA pilot closed as PILOT_NO_CLEAR_GAIN).
+  backend: voxcpm2

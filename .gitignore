@@ -23,6 +23,9 @@ hf_cache/
 *.bin
 *.onnx
 
+# User input scripts (drop .txt here for the WebUI batch mode)
+inputs/*.txt
+
 # Logs
 logs/
 *.log
