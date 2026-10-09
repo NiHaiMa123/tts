@@ -29,6 +29,10 @@ generation:
   normalize: true
   denoise: false
   retry_badcase: true
+  # 长文本分句上限（字）；超过则按句切块分别生成再拼接——
+  # 长 continuation 会随时间漂离参考音（实测 250s 生成 cos 0.6->0.48），
+  # 每块从 prompt cache 重锚定可保持音色。设 0 关闭。
+  chunk_chars: 100
 
 notes: >
   VoxCPM2 2B tokenizer-free diffusion-AR TTS (48kHz, 30 languages).

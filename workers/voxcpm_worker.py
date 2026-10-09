@@ -156,6 +156,7 @@ class VoxCPMWorker(WorkerServer):
             "retry_badcase_ratio_threshold": float(
                 gen.get("retry_badcase_ratio_threshold", 6.0)),
         }
+        chunk_chars = int(gen.get("chunk_chars", 100))
         # Public generate() is (*args, **kwargs) -> ndarray; the real
         # signature lives on _generate().
         target = getattr(model, "_generate", model.generate)
@@ -183,6 +184,7 @@ class VoxCPMWorker(WorkerServer):
             and not call_kwargs.get("denoise")
         )
         cache_state = "bypass"
+        n_chunks = 1
         # voxcpm logs "Badcase detected" to stderr when retry_badcase
         # re-rolls a bad generation; capture it so we can report the real
         # retry count instead of claiming first-pass success.
@@ -192,9 +194,9 @@ class VoxCPMWorker(WorkerServer):
         t0 = time.monotonic()
         with contextlib.redirect_stderr(errbuf):
             if cacheable:
-                wav, cache_state = self._generate_cached(
+                wav, cache_state, n_chunks = self._generate_cached(
                     model, str(params["text"]), prompt_wav, prompt_text,
-                    call_kwargs)
+                    call_kwargs, seed, chunk_chars)
             else:
                 wav = model.generate(**call_kwargs)
         wall = time.monotonic() - t0
@@ -215,20 +217,59 @@ class VoxCPMWorker(WorkerServer):
                 "seed": seed,
                 "generation": call_kwargs,
                 "prompt_cache": cache_state,
+                "chunks": n_chunks,
                 "retry_badcase_enabled": bool(call_kwargs.get(
                     "retry_badcase", True)),
                 "retry_count": retry_count,
             },
         }
 
+    @staticmethod
+    def _split_text(text: str, max_chars: int) -> list[str]:
+        """Sentence-pack a long text into <= ``max_chars`` chunks.
+
+        Long single-shot continuation drifts off the reference voice —
+        each chunk re-anchors to the prompt cache instead.
+        """
+        import re
+        pieces = re.split(r"(?<=[。！？!?；;…])", text)
+        chunks: list[str] = []
+        cur = ""
+        for piece in pieces:
+            piece = piece.strip()
+            if not piece:
+                continue
+            if len(piece) > max_chars:
+                subs = re.split(r"(?<=[，,、：:])", piece)
+            else:
+                subs = [piece]
+            for s in subs:
+                s = s.strip()
+                if not s:
+                    continue
+                while len(s) > max_chars:          # hard cut last resort
+                    head, s = s[:max_chars], s[max_chars:]
+                    if cur:
+                        chunks.append(cur)
+                        cur = ""
+                    chunks.append(head)
+                if cur and len(cur) + len(s) > max_chars:
+                    chunks.append(cur)
+                    cur = ""
+                cur += s
+        if cur:
+            chunks.append(cur)
+        return chunks or [text]
+
     def _generate_cached(self, model, text: str, prompt_wav, prompt_text,
-                         call_kwargs: dict):
+                         call_kwargs: dict, seed=None, chunk_chars=0):
         """generate() equivalent via a reusable prompt cache.
 
         Builds ``tts_model.build_prompt_cache`` once per
         (audio path+mtime, prompt text); every later call goes straight to
         ``_generate_with_prompt_cache`` — the reference encode + LM prefill
-        is skipped, output is unchanged.
+        is skipped. Long texts are split into sentence chunks
+        (``generation.chunk_chars``) so the voice stays anchored.
         """
         import re
         tts_model = model.tts_model
@@ -257,24 +298,45 @@ class VoxCPMWorker(WorkerServer):
                 model.text_normalizer = TextNormalizer()
             text = model.text_normalizer.normalize(text)
 
+        chunks = (self._split_text(text, chunk_chars)
+                  if chunk_chars > 0 else [text])
         from voxcpm.model.utils import next_and_close
-        wav, _txt_tok, _feats = next_and_close(
-            tts_model._generate_with_prompt_cache(
-                target_text=text,
-                prompt_cache=pcache,
-                min_len=call_kwargs.get("min_len", 2),
-                max_len=call_kwargs.get("max_len", 4096),
-                inference_timesteps=call_kwargs.get(
-                    "inference_timesteps", 10),
-                cfg_value=call_kwargs.get("cfg_value", 2.0),
-                retry_badcase=call_kwargs.get("retry_badcase", True),
-                retry_badcase_max_times=call_kwargs.get(
-                    "retry_badcase_max_times", 3),
-                retry_badcase_ratio_threshold=call_kwargs.get(
-                    "retry_badcase_ratio_threshold", 6.0),
-                streaming=False,
-            ))
-        return wav, state
+        waves = []
+        for i, chunk in enumerate(chunks):
+            if seed is not None:
+                self._torch.manual_seed(int(seed) + i)
+                if self._torch.cuda.is_available():
+                    self._torch.cuda.manual_seed_all(int(seed) + i)
+            wav, _txt_tok, _feats = next_and_close(
+                tts_model._generate_with_prompt_cache(
+                    target_text=chunk,
+                    prompt_cache=pcache,
+                    min_len=call_kwargs.get("min_len", 2),
+                    max_len=call_kwargs.get("max_len", 4096),
+                    inference_timesteps=call_kwargs.get(
+                        "inference_timesteps", 10),
+                    cfg_value=call_kwargs.get("cfg_value", 2.0),
+                    retry_badcase=call_kwargs.get("retry_badcase", True),
+                    retry_badcase_max_times=call_kwargs.get(
+                        "retry_badcase_max_times", 3),
+                    retry_badcase_ratio_threshold=call_kwargs.get(
+                        "retry_badcase_ratio_threshold", 6.0),
+                    streaming=False,
+                ))
+            waves.append(wav)
+        if len(waves) > 1:
+            import torch as _t
+            sr = int(getattr(tts_model, "sample_rate", 48000))
+            gap = _t.zeros(int(sr * 0.2))            # 200ms between chunks
+            joined = []
+            for i, w in enumerate(waves):
+                if i:
+                    joined.append(gap)
+                joined.append(w.reshape(-1))
+            wav = _t.cat(joined)
+        else:
+            wav = waves[0]
+        return wav, state, len(chunks)
 
     def handle_codec_roundtrip(self, params: dict) -> dict:
         """Real AudioVAE encode->decode when the model exposes it."""

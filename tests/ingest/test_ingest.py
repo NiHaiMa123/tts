@@ -226,6 +226,14 @@ def test_serve_review_endpoints(tmp_path):
                    {"name": "../evil.json", "data": {}, "state": {}})
         assert bad["ok"] is False
 
+        # CJK filenames arrive percent-encoded — must be unquoted
+        import urllib.parse
+        (bundle / "音频_睡眠.wav").write_bytes(wav.read_bytes())
+        got = urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/"
+            + urllib.parse.quote("音频_睡眠.wav")).read()
+        assert got == wav.read_bytes()
+
         # path traversal blocked
         import urllib.error
         with pytest.raises(urllib.error.HTTPError) as e:

@@ -7,6 +7,8 @@ window stops the server. Launches Edge automatically after bind.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import subprocess
@@ -546,11 +548,36 @@ def create_app(manager: BackendManager | None = None):
                     while out_path.exists():
                         out_path = out_dir / f"{stem}-{n}.wav"
                         n += 1
-                    client.generate(
+                    result = client.generate(
                         text=text, output_path=str(out_path),
                         reference_audio=character.reference_audio,
                         reference_text=character.reference_text,
                         seed=42, options={}, timeout=1800)
+                    # Provenance sidecar — similarity audits need to know
+                    # which reference/seed/params produced each wav.
+                    sidecar = {
+                        "character": character.character_id,
+                        "backend": backend_id,
+                        "input_text_file": txt_path.name,
+                        "text_sha256": hashlib.sha256(
+                            text.encode("utf-8")).hexdigest(),
+                        "text_chars": len(text),
+                        "seed": 42,
+                        "reference": {
+                            "audio": character.reference_audio,
+                            "sha256": character.reference_sha256,
+                            "text": character.reference_text,
+                        },
+                        "worker": {
+                            "sample_rate": result.get("sample_rate"),
+                            "duration": result.get("duration"),
+                            "wall_seconds": result.get("wall_seconds"),
+                            **(result.get("metadata") or {}),
+                        },
+                    }
+                    out_path.with_suffix(".wav.json").write_text(
+                        json.dumps(sidecar, ensure_ascii=False, indent=2),
+                        encoding="utf-8")
                     outputs.append(out_path.name)
                     session.transition(
                         "generating",

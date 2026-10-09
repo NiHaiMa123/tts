@@ -15,6 +15,12 @@ VoxCPM2 与 Qwen3-TTS 为一等后端。主平台不复制模型实现——每�
 
 - 把台本存为 UTF-8 txt 放进 **`inputs/`** → 页面选**角色**（后端已锁定）
   → 「开始 TTS」→ 每个 txt 生成一个 WAV 到 `outputs/webui/<角色>/`
+- 每个 WAV 旁会写同名 `.wav.json` sidecar（参考音 sha、seed、参数、
+  分块数、耗时）——做相似度审计/复现时用
+- **长文（>100 字）自动分句生成再拼接**：voxcpm2 单次 continuation 超
+  长会随时间漂离参考音（实测 250s 文件 cos_ref 从 0.81 衰减到 0.46），
+  分句后每段从 prompt cache 重锚定（各段稳定 0.85-0.88）。阈值在
+  `configs/backends/voxcpm2.yaml` 的 `chunk_chars`，设 0 关闭
 - **关掉控制台窗口 = 停止服务器**；关页面不影响任务
 
 ## 目录结构

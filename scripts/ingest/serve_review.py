@@ -29,7 +29,7 @@ import sys
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import unquote, urlparse, parse_qs
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CHAR_RE = re.compile(r"^[a-z0-9_]+$")
@@ -94,7 +94,7 @@ def make_handler(bundle: Path, root: Path = REPO_ROOT):
 
         def do_GET(self):
             url = urlparse(self.path)
-            path = url.path.lstrip("/")
+            path = unquote(url.path).lstrip("/")
             if not path:
                 for cand in ("review.html", "refpick.html"):
                     if (bundle / cand).is_file():
