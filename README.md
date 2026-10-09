@@ -133,6 +133,8 @@ uv pip install --python backend_envs/asr_qwen3/Scripts/python.exe \
 ## 加新角色
 
 1. 源音频放 `data/characters/<id>/inbox/`，数据集放 `datasets/v1/`
+   （音频从哪来：**`docs/pipelines/voice-assets.md`**——解包走
+   Ludiglot 项目，入库后的标准化/冻结工具待迁移）
 2. 参考音放 `assets/characters/<id>/reference/ref.wav`，算 sha256
 3. 建 `configs/characters/<id>.yaml`：`backend:` 锁后端 +
    `reference` + `dataset` + `evaluation.anchor_texts`
