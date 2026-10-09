@@ -74,6 +74,7 @@ def _load_yaml(path: Path, env: dict[str, str]) -> dict[str, Any]:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ConfigError(f"{path}: top-level YAML must be a mapping")
+    env = {"TTS_ROOT": str(_REPO_ROOT), **env}
     return expand_env(data, env)
 
 
@@ -113,6 +114,8 @@ def load_character(path_or_id: str, env: dict[str, str] | None = None,
         dataset=data.get("dataset") or {},
         reference=data.get("reference") or {},
         backend=data.get("backend"),
+        adapters=data.get("adapters") or {},
+        postprocess=data.get("postprocess") or {},
         evaluation=data.get("evaluation") or {},
         provenance=data.get("provenance") or {},
         config_path=path,

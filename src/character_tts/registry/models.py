@@ -39,6 +39,8 @@ class CharacterProfile:
     dataset: dict[str, Any]
     reference: dict[str, Any]
     backend: str | None = None
+    adapters: dict[str, Any] = field(default_factory=dict)
+    postprocess: dict[str, Any] = field(default_factory=dict)
     evaluation: dict[str, Any] = field(default_factory=dict)
     provenance: dict[str, Any] = field(default_factory=dict)
     config_path: Path | None = None

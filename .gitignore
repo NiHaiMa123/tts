@@ -17,6 +17,9 @@ outputs/*
 !outputs/.gitkeep
 models/
 hf_cache/
+
+# Character source audio / datasets (large binaries; registry yaml keeps paths)
+data/
 *.wav
 *.safetensors
 *.pt

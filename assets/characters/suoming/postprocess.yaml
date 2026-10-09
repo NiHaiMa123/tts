@@ -1,0 +1,11 @@
+# suoming post-processing chain (RESERVED — not yet applied by the pipeline).
+# When implemented, workers/host will apply these steps after backend decode.
+# Keep in sync with `postprocess:` in configs/characters/suoming.yaml.
+enabled: false
+steps:
+  # - name: loudness_normalize
+  #   target_lufs: -16.0
+  # - name: trim_silence
+  #   threshold_db: -50
+  # - name: denoise
+  #   backend: none

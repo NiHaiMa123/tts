@@ -4,55 +4,32 @@ display_name: 锁暝
 backend: voxcpm2
 dataset:
   source: legacy_dotstts
-  train_manifest: ${DOTSTTS_ROOT}/datasets/suoming/v1/train.jsonl
-  validation_manifest: ${DOTSTTS_ROOT}/datasets/suoming/v1/validation.jsonl
-  test_manifest: ${DOTSTTS_ROOT}/datasets/suoming/v1/test.jsonl
-  root: ${DOTSTTS_ROOT}/datasets/suoming/v1
-  manifest: ${DOTSTTS_ROOT}/datasets/suoming/v1/manifest.json
+  train_manifest: ${TTS_ROOT}/data/characters/suoming/datasets/v1/train.jsonl
+  validation_manifest: ${TTS_ROOT}/data/characters/suoming/datasets/v1/validation.jsonl
+  test_manifest: ${TTS_ROOT}/data/characters/suoming/datasets/v1/test.jsonl
+  root: ${TTS_ROOT}/data/characters/suoming/datasets/v1
+  manifest: ${TTS_ROOT}/data/characters/suoming/datasets/v1/manifest.json
 reference:
   text: 谛天鉴除了处理岁主事务，也掌管天文、历法。各州分鉴各有职责，梦州也有自己——唔……先前御者说对谛天鉴了解不多，不知不觉话多了些。总之，谛天鉴为岁主尽责，那自然，御者若有所求，无论缘由，我都会回应。
-  audio: ${DOTSTTS_ROOT}/data/inbox/锁暝/中立_neutral/【中立_neutral】谛天鉴除了处理岁主事务，也掌管天文、历法。各州分鉴各有职责，梦州也有自己——唔……先前御者说对谛天鉴了解不多，不知不觉话多了些。总之，谛天鉴为岁主尽责，那自然，.wav
+  audio: ${TTS_ROOT}/assets/characters/suoming/reference/ref.wav
   sha256: c4322e3230ab952edb7cd456329cb5b48195d9f33c5459c0ba76d8d79d3a7f92
-legacy_voice_profile:
-  path: ${DOTSTTS_ROOT}/configs/voices/suoming_step500_v1.yaml
-  model_id: suoming_step500_v1
-  base_model:
-    path: ${DOTSTTS_ROOT}/pretrained_models/dots.tts-soar
-    revision: 2f9b3e18d70d670d4c701da2dc55ded5755815ce
-  adapter:
-    path: ${DOTSTTS_ROOT}/data/work/suoming/suoming_lora_v1/checkpoint-00000500/model
-    format: dots_tts_trainable_delta
-    training_step: 500
-    weights_sha256: d6ffc625f7def0358665e6a2203ebaa9c01a6af6dc6cff6f0f7aa4d9cfe5e251
-    metadata_sha256: fbd3501c70b61015c04edb72b45bc5884d8f1948a65f28ad9c2af4f7d15f6105
-  generation:
-    language: chinese
-    template_name: tts
-    normalize_text: false
-    soften_emphasis: true
-    speaker_scale: 1.5
-    ode_method: euler
-    num_steps: 16
-    guidance_scale: 1.2
-    base_seed: 42
-    pause_ms: 250
-    max_chars: 120
-  runtime:
-    precision: bfloat16
-    optimize: true
-    max_generate_length: 500
-    max_sequence_length: 2048
-    vocoder_merge_steps: 4
-    warmup_on_optimize: true
-    merge_lora: true
+# Reserved interfaces — not yet implemented in the pipeline:
+# adapters: LoRA/adapter weights live under assets/characters/suoming/adapters/<backend>/<name>/
+#   (gitignored; promoted adapters get registered here with weights sha256)
+adapters: {}
+# postprocess: audio post-chain applied after backend decode (loudness/denoise/etc.)
+#   mirrors assets/characters/suoming/postprocess.yaml; empty = backend defaults
+postprocess: {}
 evaluation:
   anchor_texts:
   - id: rain
     text: 午后凉风拂过，雨云渐聚，细雨敲在屋檐上。我坐在窗边听雨，拭去玄朱锁上的薄尘。这确实是有些凄迷的场景，但……我很喜欢。
-    audio: ${DOTSTTS_ROOT}/data/work/standardized/fb/fb8e3c080298ab2d0a404789e6973d68cf5af7bfadb8486851fae677f1aac1ca.wav
+    audio: ${TTS_ROOT}/data/characters/suoming/datasets/v1/audio/fb8e3c080298ab2d0a404789e6973d68cf5af7bfadb8486851fae677f1aac1ca.wav
     sha256: 0745cd41cc9d07e544ab83b9c9db43ac5d355fe2d4765ec970494fd0275693ab
-    source: ${DOTSTTS_ROOT}/datasets/suoming/v1/validation.jsonl
+    source: data/characters/suoming/datasets/v1/validation.jsonl
 provenance:
   imported_from: E:\project\dotstts
   imported_at: '2026-10-08T10:18:02+00:00'
   importer: scripts/import_legacy_assets.py
+  assets_migrated: scripts/migrate_suoming_assets.py
+  migration_note: audio copied into repo; jsonl audio fields rewritten to repo-relative paths
