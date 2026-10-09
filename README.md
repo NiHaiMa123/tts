@@ -41,9 +41,11 @@ src/character_tts/
   diagnostics/                # 客观音频指标
   audio/                      # wav io、sha256、输出路径安全
   web/                        # 试听页生成 + WebUI (FastAPI)
+  ingest/                     # 入库管线：assess/standardize/review/freeze
 scripts/
   start_webui.py              # WebUI 入口（启动TTS.vbs 的目标，勿移）
   asr_check.py                # ASR 辅助检查（三后端统一入口）
+  ingest/                     # 入库 CLI：assess/standardize/review/freeze
   eval/                       # 评测/实验 runner + 评分导出
     run_gate.py  run_voxcpm_phase5a.py  run_voxcpm_phase5a2.py
     export_*_ratings.py
@@ -58,6 +60,7 @@ tests/
   backends/    test_protocol.py  test_worker_lifecycle.py
   evaluation/  test_gate.py  test_phase5a*.py  test_lora_*.py
   audio/       test_metrics.py  test_output_path.py
+  ingest/      test_ingest.py
   app/         test_download.py
 workers/                      # 各后端薄适配（跑在 backend 自己的 env 里）
   _worker_base.py             #   JSONL 协议公共底座
@@ -132,9 +135,9 @@ uv pip install --python backend_envs/asr_qwen3/Scripts/python.exe \
 
 ## 加新角色
 
-1. 源音频放 `data/characters/<id>/inbox/`，数据集放 `datasets/v1/`
-   （音频从哪来：**`docs/pipelines/voice-assets.md`**——解包走
-   Ludiglot 项目，入库后的标准化/冻结工具待迁移）
+1. 源音频放 `data/characters/<id>/inbox/`（音频从哪来、入库管线四步
+   命令：**`docs/pipelines/voice-assets.md`**——解包走 Ludiglot 项目，
+   assess→standardize→review→freeze 用 `scripts/ingest/`）
 2. 参考音放 `assets/characters/<id>/reference/ref.wav`，算 sha256
 3. 建 `configs/characters/<id>.yaml`：`backend:` 锁后端 +
    `reference` + `dataset` + `evaluation.anchor_texts`
