@@ -91,7 +91,7 @@ def _env_python() -> Path:
 
 
 def _gen_script() -> Path:
-    return repo_root() / "scripts/eval_voxcpm_lora_env.py"
+    return repo_root() / "scripts/lora/eval_voxcpm_lora_env.py"
 
 
 def run_lora_eval(cfg: dict[str, Any], character: CharacterProfile,

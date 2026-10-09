@@ -14,7 +14,7 @@ import logging
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 from character_tts.evaluation.phase5a import (  # noqa: E402
     load_phase5a_config, run_phase5a)

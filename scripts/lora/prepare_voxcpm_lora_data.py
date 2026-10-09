@@ -29,7 +29,7 @@ import sys
 import wave
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 from character_tts.audio.io import read_wav  # noqa: E402
 from character_tts.evaluation.phase5a import load_phase5a_config  # noqa: E402

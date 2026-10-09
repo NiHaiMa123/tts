@@ -4,7 +4,7 @@ import struct
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from character_tts.evaluation.lora_audit import (  # noqa: E402
     classify_lora_key, compare_generation_args, evaluate_load_integrity,

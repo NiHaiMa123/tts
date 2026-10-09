@@ -10,7 +10,7 @@ logic is unit-testable without torch/CUDA:
 - Phase 5B manifest hash re-verification
 - final verdict enumeration (ADAPTER_*/COMPARABILITY_*/INCONCLUSIVE)
 
-The env-side runner (scripts/audit_voxcpm_lora_effect.py) collects raw
+The env-side runner (scripts/lora/audit_voxcpm_lora_effect.py) collects raw
 numbers (tensor norms, loaded/skipped key lists, generated WAV shas) and
 feeds them here for judgement.
 """

@@ -41,6 +41,24 @@ src/character_tts/
   diagnostics/                # 客观音频指标
   audio/                      # wav io、sha256、输出路径安全
   web/                        # 试听页生成 + WebUI (FastAPI)
+scripts/
+  start_webui.py              # WebUI 入口（启动TTS.vbs 的目标，勿移）
+  asr_check.py                # ASR 辅助检查（三后端统一入口）
+  eval/                       # 评测/实验 runner + 评分导出
+    run_gate.py  run_voxcpm_phase5a.py  run_voxcpm_phase5a2.py
+    export_*_ratings.py
+  lora/                       # LoRA pilot 工具链（已关闭，留作复用）
+    prepare_voxcpm_lora_data.py  train_voxcpm_lora_pilot.py
+    run_voxcpm_lora_eval.py  eval_voxcpm_lora_env.py
+    audit_voxcpm_lora_effect.py
+  bootstrap/                  # 后端 env 安装脚本
+tests/
+  conftest.py  fake_worker.py # 共享 fixture + 假 worker
+  registry/    test_config_loader.py
+  backends/    test_protocol.py  test_worker_lifecycle.py
+  evaluation/  test_gate.py  test_phase5a*.py  test_lora_*.py
+  audio/       test_metrics.py  test_output_path.py
+  app/         test_download.py
 workers/                      # 各后端薄适配（跑在 backend 自己的 env 里）
   _worker_base.py             #   JSONL 协议公共底座
   voxcpm_worker.py            #   backend_envs/voxcpm2
@@ -53,9 +71,10 @@ models/                       # 本地模型资产（gitignore）
   asr/<backend>/<rev>/        #   三个 ASR 模型（共 ~4.3GB）
 inputs/                       # WebUI 批量台本 txt（gitignored）
 outputs/                      # 生成物与实验结果（gitignored）
-  gates/<exp>/                #   评测产物 + listen/ 试听评分页
+  gates/<exp>/                #   冻结实验目录：wav + manifest + listen/ + logs/
   webui/<角色>/               #   WebUI 产出 WAV
   user_gen/                   #   手工长文生成
+  _tmp/                       #   中间产物/冒烟测试——可随时清空
 logs/                         # worker stderr、downloads.jsonl
 hf_cache/                     # HF 模型下载缓存（gitignore，TTS_MODEL_ROOT）
 启动TTS.vbs                   # 双击入口：起控制台服务器 + 自动开 Edge
@@ -70,6 +89,9 @@ hf_cache/                     # HF 模型下载缓存（gitignore，TTS_MODEL_RO
 - 先 codec roundtrip，再 zero-shot，人耳通过才允许训练
 - 下载顺序：本地 cache → hf-mirror.com → 127.0.0.1:7897 代理；
   revision 固定，写 logs/downloads.jsonl
+- 产物分层：`outputs/gates/<exp>/` 是冻结的实验记录（manifest 里全字段
+  溯源，勿改）；脚本临时文件、冒烟测试丢 `outputs/_tmp/`；日志进
+  `<exp>/logs/` 或根 `logs/`——不在实验目录顶层散放中间文件
 
 ## 环境
 

@@ -29,7 +29,7 @@ from pathlib import Path
 
 import yaml
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 TRAIN_PY = ROOT / "backend_envs/voxcpm2_train/Scripts/python.exe"
 OFFICIAL = ROOT / "backend_envs/voxcpm2/official_v203/train_voxcpm_finetune.py"
 CONFIG = ROOT / "configs/training/suoming_voxcpm_lora_pilot.yaml"

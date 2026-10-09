@@ -16,7 +16,7 @@ import yaml
 from character_tts.evaluation import lora_pilot
 from character_tts.registry.models import BackendProfile, CharacterProfile
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parents[2]
 
 
 def _wav(path: Path, seconds: float = 0.1, sr: int = 8000,
@@ -43,7 +43,7 @@ def _sha(path: Path) -> str:
 
 def _load_script(name: str):
     spec = importlib.util.spec_from_file_location(
-        name, REPO / "scripts" / f"{name}.py")
+        name, REPO / "scripts" / "lora" / f"{name}.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 OUT_DIR = ROOT / "outputs/gates/suoming_voxcpm_phase5a2"
 SRC = OUT_DIR / "listen/listen-ratings-phase5a2.json"
 MANIFEST = OUT_DIR / "manifest.json"
