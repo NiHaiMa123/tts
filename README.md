@@ -74,6 +74,14 @@ uv pip install --python .venv/Scripts/python.exe -e ".[metrics,web,dev]"
 # 后端 env（按需）
 powershell -File scripts/bootstrap/setup_voxcpm.ps1     # 锁暝生产环境
 powershell -File scripts/bootstrap/setup_qwen3_tts.ps1
+
+# ASR 辅助检查 env（SenseVoice，仅辅助证据用）
+uv venv backend_envs/asr_sensevoice --python 3.12
+uv pip install --python backend_envs/asr_sensevoice/Scripts/python.exe \
+  "torch==2.8.0+cu128" "torchaudio==2.8.0+cu128" \
+  --index-url https://download.pytorch.org/whl/cu128
+uv pip install --python backend_envs/asr_sensevoice/Scripts/python.exe \
+  "funasr==1.4.4" soundfile
 ```
 
 ## 加新角色
@@ -84,8 +92,23 @@ powershell -File scripts/bootstrap/setup_qwen3_tts.ps1
    `reference` + `dataset` + `evaluation.anchor_texts`
 4. WebUI 下拉自动出现，无需改代码
 
+## ASR 辅助检查（SenseVoice）
+
+```powershell
+# manifest 批量
+backend_envs\asr_sensevoice\Scripts\python.exe scripts\asr_sensevoice.py ^
+  --manifest outputs/gates/<exp>/manifest.json --out <exp>/asr_check.json
+
+# 任意 wav + 参考文本
+backend_envs\asr_sensevoice\Scripts\python.exe scripts\asr_sensevoice.py ^
+  --wav xxx.wav --text-file xxx.txt --out out.json
+```
+
+模型在 `models/asr/sensevoice/`（gitignored，901MB）。输出 char-CER，
+仅辅助证据——`text_complete` 仍是人耳判断字段。
+
 ## 测试
 
 ```powershell
-./.venv/Scripts/python.exe -m pytest    # 75 tests
+./.venv/Scripts/python.exe -m pytest    # 69 tests
 ```
