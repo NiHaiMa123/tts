@@ -1,5 +1,7 @@
 character_id: suoming
 display_name: 锁暝
+# Locked backend for this character (WebUI select = character only).
+backend: voxcpm2
 dataset:
   source: legacy_dotstts
   train_manifest: ${DOTSTTS_ROOT}/datasets/suoming/v1/train.jsonl

@@ -1,9 +1,9 @@
 """WebUI — character TTS front end (dotstts-style batch workbench).
 
 Reads every ``inputs/*.txt`` (UTF-8), generates one WAV per file into
-``outputs/webui/<character>/``. Single-card dark UI, heartbeat watchdog:
-closing the page or the console window stops the server. Launches Edge
-automatically after the server binds.
+``outputs/webui/<character>/``. Single-card dark UI. The picker is the
+character; each character locks its backend. Only closing the console
+window stops the server. Launches Edge automatically after bind.
 """
 from __future__ import annotations
 
@@ -12,15 +12,13 @@ import os
 import subprocess
 import sys
 import threading
-import time
-import uuid
 import webbrowser
 from pathlib import Path
 from typing import Any
 
 from ..backends.manager import BackendBusyError, BackendManager
 from ..registry.loader import (
-    list_backends,
+    list_characters,
     load_app_config,
     load_backend,
     load_character,
@@ -32,8 +30,6 @@ logger = logging.getLogger(__name__)
 
 APP_ID = "character-tts-webui"
 INPUTS_DIR = repo_root() / "inputs"
-HEARTBEAT_TIMEOUT_S = 8.0
-WATCHDOG_POLL_S = 1.0
 
 INDEX_HTML = """<!doctype html>
 <html lang="zh-CN">
@@ -41,7 +37,7 @@ INDEX_HTML = """<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>锁暝 TTS</title>
+  <title>角色 TTS</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23101522'/%3E%3Cpath d='M17 39c7-18 23-24 32-20-11 4-15 10-18 19 7-6 13-7 18-5-7 2-11 7-15 14-7 2-13-1-17-8Z' fill='%236ee7e0'/%3E%3C/svg%3E">
   <style>
     :root {
@@ -176,7 +172,7 @@ INDEX_HTML = """<!doctype html>
       <div class="content">
         <header>
           <div>
-            <h1 id="title">锁暝 TTS</h1>
+            <h1 id="title">角色 TTS</h1>
             <p class="subtitle">自动读取 inputs 目录中的 TXT，每个文件生成一个最终音频。</p>
           </div>
           <div id="status-pill" class="status-pill">
@@ -186,11 +182,11 @@ INDEX_HTML = """<!doctype html>
         </header>
 
         <div class="field">
-          <label for="model">后端</label>
+          <label for="model">角色</label>
           <select id="model" aria-describedby="model-description">
-            <option value="">正在读取后端列表…</option>
+            <option value="">正在读取角色列表…</option>
           </select>
-          <p id="model-description" class="subtitle">后端、参考音频与推理参数整体切换。</p>
+          <p id="model-description" class="subtitle">每个角色锁定自己的后端与参考音频。</p>
         </div>
 
         <div id="filelist" class="filelist">正在扫描 inputs/ …</div>
@@ -214,7 +210,7 @@ INDEX_HTML = """<!doctype html>
           <button id="open-output" type="button">打开输出目录</button>
         </section>
 
-        <footer>关闭此页面后，本地 WebUI 和运行中的 TTS 任务会自动结束。</footer>
+        <footer>关闭终端窗口即停止本地服务器；仅关闭页面不会中断任务。</footer>
       </div>
     </section>
   </main>
@@ -224,8 +220,7 @@ INDEX_HTML = """<!doctype html>
     const labels = {
       starting: "启动中", idle: "就绪", preparing: "准备中",
       loading_model: "加载模型", generating: "生成中", finalizing: "保存中",
-      completed: "已完成", failed: "出错", interrupted: "已中断",
-      shutting_down: "正在关闭"
+      completed: "已完成", failed: "出错", interrupted: "已中断"
     };
     const model = document.querySelector("#model");
     const modelDescription = document.querySelector("#model-description");
@@ -242,7 +237,7 @@ INDEX_HTML = """<!doctype html>
     const openOutput = document.querySelector("#open-output");
     let lastStatus = null, connected = true, audioCtx = null, sawActive = false;
     let modelSpecs = new Map();
-    const BASE_TITLE = document.title || "锁暝 TTS";
+    const BASE_TITLE = document.title || "角色 TTS";
 
     function tone(freq, startOffset, duration, peak = 0.14) {
       const osc = audioCtx.createOscillator();
@@ -277,7 +272,7 @@ INDEX_HTML = """<!doctype html>
       const item = modelSpecs.get(model.value);
       modelDescription.textContent = item
         ? item.description
-        : "后端、参考音频与推理参数整体切换。";
+        : "每个角色锁定自己的后端与参考音频。";
     }
 
     function setModels(models, selected, defaultModel) {
@@ -320,9 +315,10 @@ INDEX_HTML = """<!doctype html>
         ? `【${label} ${Math.round(progress)}%】${BASE_TITLE}`
         : `【${label}】${BASE_TITLE}`;
 
-      setModels(state.models, state.selected_model || state.default_model, state.default_model);
+      setModels(state.characters,
+        state.selected_character || state.default_character, state.default_character);
       model.disabled = active;
-      generate.disabled = active || state.status === "shutting_down" || !state.can_generate;
+      generate.disabled = active || !state.can_generate;
       generate.textContent = active ? "正在生成…" : "开始 TTS";
 
       statusPill.className = `status-pill ${active ? "active" : state.status || ""}`;
@@ -376,7 +372,7 @@ INDEX_HTML = """<!doctype html>
       message.textContent = "正在创建任务…";
       try {
         await request("/api/generate", { method: "POST",
-          body: JSON.stringify({ model: model.value }) });
+          body: JSON.stringify({ character: model.value }) });
         await pollStatus();
       } catch (error) {
         message.className = "error"; message.textContent = error.message;
@@ -393,17 +389,7 @@ INDEX_HTML = """<!doctype html>
       finally { openOutput.disabled = false; }
     });
 
-    async function heartbeat() {
-      try { await request("/api/heartbeat", { method: "POST", body: "{}" }); } catch (_) {}
-    }
-    window.addEventListener("pagehide", (event) => {
-      if (!event.persisted) {
-        navigator.sendBeacon("/api/close", new Blob(["{}"], { type: "application/json" }));
-      }
-    });
-
-    heartbeat(); pollStatus();
-    setInterval(heartbeat, 2000);
+    pollStatus();
     setInterval(pollStatus, 800);
   </script>
 </body>
@@ -412,7 +398,7 @@ INDEX_HTML = """<!doctype html>
 
 
 class _Session:
-    """Batch generation state machine + page-liveness tracking."""
+    """Batch generation state machine."""
 
     def __init__(self) -> None:
         self.lock = threading.Lock()
@@ -421,10 +407,7 @@ class _Session:
         self.message = ""
         self.outputs: list[str] = []
         self.errors: list[str] = []
-        self.selected_model: str | None = None
-        self.last_heartbeat = 0.0
-        self.page_seen = False
-        self.shutdown_requested = False
+        self.selected_character: str | None = None
         self.current_file: str | None = None
 
     def snapshot(self) -> dict[str, Any]:
@@ -433,7 +416,7 @@ class _Session:
                 "status": self.status, "progress": self.progress,
                 "message": self.message, "outputs": list(self.outputs),
                 "errors": list(self.errors),
-                "selected_model": self.selected_model,
+                "selected_character": self.selected_character,
                 "current_file": self.current_file,
             }
 
@@ -444,16 +427,6 @@ class _Session:
             for k, v in kw.items():
                 setattr(self, k, v)
 
-    def heartbeat(self) -> None:
-        with self.lock:
-            self.page_seen = True
-            self.last_heartbeat = time.monotonic()
-
-    def heartbeat_stale(self) -> bool:
-        with self.lock:
-            return (self.page_seen
-                    and time.monotonic() - self.last_heartbeat > HEARTBEAT_TIMEOUT_S)
-
 
 def _list_inputs() -> list[Path]:
     if not INPUTS_DIR.is_dir():
@@ -462,20 +435,21 @@ def _list_inputs() -> list[Path]:
                   if p.is_file() and not p.name.lower().startswith("readme"))
 
 
-def _describe_backend(backend_id: str, default_character: str | None) -> str:
+_BACKEND_LABELS = {
+    "voxcpm2": "VoxCPM2 零样本 · 48kHz",
+    "dots_legacy": "DotsTTS 旧基线",
+    "qwen3_tts": "Qwen3-TTS 零样本",
+}
+
+
+def _describe_character(character_id: str) -> str:
+    """Label line for a character: its locked backend."""
     try:
-        profile = load_backend(backend_id)
+        character = load_character(character_id)
     except ConfigError:
-        return backend_id
-    desc = {
-        "voxcpm2": "VoxCPM2 · 零样本 · 48kHz（生产默认）",
-        "dots_legacy": "DotsTTS 旧基线 · 锁暝 LoRA",
-        "qwen3_tts": "Qwen3-TTS · 零样本",
-    }.get(backend_id, backend_id)
-    extra = "；".join(x for x in (
-        profile.notes.split("。")[0].strip() if profile.notes else "",
-    ) if x)
-    return f"{desc} · 角色 {default_character or '-'}"
+        return character_id
+    backend = character.backend or load_app_config().default_backend or "-"
+    return _BACKEND_LABELS.get(backend, backend) + "（锁定后端）"
 
 
 def create_app(manager: BackendManager | None = None):
@@ -501,43 +475,45 @@ def create_app(manager: BackendManager | None = None):
     def status() -> dict[str, Any]:
         snap = session.snapshot()
         inputs = _list_inputs()
-        models = []
-        for b in list_backends():
+        characters = []
+        for c in list_characters():
             try:
-                if load_backend(b).enabled:
-                    models.append({
-                        "id": b, "label": b,
-                        "description": _describe_backend(
-                            b, app_config.default_character)})
+                load_character(c)
             except ConfigError:
                 continue
+            characters.append({
+                "id": c,
+                "label": load_character(c).display_name,
+                "description": _describe_character(c),
+            })
         return {
             "app_id": APP_ID,
             **snap,
-            "models": models,
-            "default_model": app_config.default_backend,
+            "characters": characters,
+            "default_character": app_config.default_character,
             "input_files": [p.name for p in inputs],
             "can_generate": bool(inputs) and snap["status"] in (
                 "idle", "completed", "failed", "interrupted"),
             "can_open_output": bool(snap["outputs"]),
         }
 
-    @app.post("/api/heartbeat")
-    def heartbeat() -> dict[str, bool]:
-        session.heartbeat()
-        return {"ok": True}
-
-    @app.post("/api/close")
-    def close() -> dict[str, bool]:
-        session.shutdown_requested = True
-        return {"ok": True}
-
-    def _batch(profile_id: str) -> None:
+    def _batch(character_id: str) -> None:
         session.transition("preparing", "正在准备…")
         try:
-            character = load_character(app_config.default_character)
+            character = load_character(character_id)
         except ConfigError as exc:
             session.transition("failed", f"角色配置错误：{exc}")
+            return
+        backend_id = character.backend or app_config.default_backend
+        try:
+            profile = load_backend(backend_id)
+        except ConfigError as exc:
+            session.transition("failed",
+                               f"角色 {character_id} 锁定的后端不可用：{exc}")
+            return
+        if not profile.enabled:
+            session.transition("failed", f"角色 {character_id} 锁定的后端 "
+                                         f"{backend_id} 未启用")
             return
         files = _list_inputs()
         if not files:
@@ -552,14 +528,10 @@ def create_app(manager: BackendManager | None = None):
                 raise BackendBusyError("另一个生成任务正在进行")
             try:
                 session.transition("loading_model",
-                                   f"正在加载后端 {profile_id}…")
-                profile = load_backend(profile_id)
+                                   f"正在加载后端 {backend_id}…")
                 client = manager.ensure(profile)
                 total = len(files)
                 for i, txt_path in enumerate(files):
-                    if session.shutdown_requested:
-                        session.transition("interrupted", "已被页面关闭中断")
-                        return
                     text = txt_path.read_text(encoding="utf-8").strip()
                     if not text:
                         continue
@@ -599,28 +571,38 @@ def create_app(manager: BackendManager | None = None):
 
     @app.post("/api/generate")
     def generate(payload: dict[str, Any]) -> dict[str, Any]:
-        model_id = str(payload.get("model") or app_config.default_backend or "")
+        character_id = str(payload.get("character")
+                           or app_config.default_character or "")
         try:
-            profile = load_backend(model_id)
-        except ConfigError as exc:
-            raise HTTPException(404, f"未知后端：{model_id}")
-        if not profile.enabled:
-            raise HTTPException(400, f"后端 {model_id} 未启用")
+            character = load_character(character_id)
+        except ConfigError:
+            raise HTTPException(404, f"未知角色：{character_id}")
+        backend_id = character.backend or app_config.default_backend
+        try:
+            if not load_backend(backend_id).enabled:
+                raise HTTPException(
+                    400, f"角色 {character_id} 锁定的后端 {backend_id} 未启用")
+        except ConfigError:
+            raise HTTPException(
+                400, f"角色 {character_id} 锁定的后端 {backend_id} 不存在")
         if not _list_inputs():
             raise HTTPException(400, "inputs/ 目录没有 .txt 文件")
         if session.snapshot()["status"] in (
                 "preparing", "loading_model", "generating", "finalizing"):
             raise HTTPException(409, "已有任务在进行中")
-        session.selected_model = model_id
+        session.selected_character = character_id
         session.outputs = []
         session.errors = []
-        threading.Thread(target=_batch, args=(model_id,), daemon=True).start()
-        return {"started": True, "model": model_id}
+        threading.Thread(target=_batch, args=(character_id,),
+                         daemon=True).start()
+        return {"started": True, "character": character_id,
+                "backend": backend_id}
 
     @app.post("/api/open-output")
     def open_output() -> dict[str, str]:
-        path = str(app_config.outputs_root / "webui"
-                   / (app_config.default_character or ""))
+        character_id = (session.snapshot()["selected_character"]
+                        or app_config.default_character or "")
+        path = str(app_config.outputs_root / "webui" / character_id)
         Path(path).mkdir(parents=True, exist_ok=True)
         if sys.platform == "win32":
             os.startfile(path)  # noqa: S606 - local desktop app
@@ -714,18 +696,6 @@ def main(host: str = "127.0.0.1", port: int = 7860,
         {"app_id": APP_ID, "pid": os.getpid(), "url": url}, indent=2),
         encoding="utf-8")
 
-    app = server.config.app  # created in Config via create_app()
-    session = getattr(app.state, "session", None) if hasattr(app, "state") else None
-
-    def watchdog() -> None:
-        while not server.should_exit:
-            time.sleep(WATCHDOG_POLL_S)
-            if session is not None and (
-                    session.shutdown_requested or session.heartbeat_stale()):
-                logger.info("page closed / heartbeat lost — shutting down")
-                server.should_exit = True
-
-    threading.Thread(target=watchdog, daemon=True).start()
     if open_browser:
         threading.Timer(0.8, _open_edge, args=(url,)).start()
     try:

@@ -38,6 +38,7 @@ class CharacterProfile:
     display_name: str
     dataset: dict[str, Any]
     reference: dict[str, Any]
+    backend: str | None = None
     evaluation: dict[str, Any] = field(default_factory=dict)
     provenance: dict[str, Any] = field(default_factory=dict)
     config_path: Path | None = None
