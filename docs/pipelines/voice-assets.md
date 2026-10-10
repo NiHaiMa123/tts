@@ -78,38 +78,48 @@ data/characters/<id>/inbox/<情绪_标签>/【<情绪>】<台词>.wav
     --inbox data\characters\<id>\inbox --out outputs\_tmp\assess_<id>.json
 ```
 
-### 1b) 预处理（可选但建议：解包音源去噪清洗）
+### 1b) 预处理（可选但建议：VAD 剪切质量差片段）
 
-游戏解包音（wem→wav）常带底噪/编码伪影/首尾静音/响度不一——
-**LoRA 会把这些声学签名学走（听感"磨砂"）**。清洗到镜像目录，
-原 inbox 不动：
+**LoRA 会把数据集的声学签名学走（听感"磨砂"）**。对策是"剪切"：
+把文件里质量差的片段整段删掉再拼接。清洗到镜像目录，原 inbox
+不动：
 
 ```bat
 .venv\Scripts\python.exe scripts\ingest\preprocess_audio.py ^
     --inbox data\characters\<id>\inbox ^
-    --out   data\characters\<id>\inbox_clean [--denoise]
+    --out   data\characters\<id>\inbox_clean --cut
 ```
 
-默认链：trim(能量门裁首尾静音,留80ms) → 70Hz高通 → RMS归一-25dBFS。
-`--denoise` 追加 ZipEnhancer ANS（voxcpm env 子进程，模型首次自动
-下载）：输出 16k 重采样回 48k，**有效带宽≤8kHz**——对 VoxCPM2 训练
-无损（编码输入本来就是 16k），写 `preprocess_report.jsonl` 如实记录。
-注意带宽损失同样作用于参考音候选：要挑参考音请从**未降噪 inbox**挑。
+`--cut` 处理链：70Hz高通 → **FSMN-VAD 切段**（asr env 子进程，
+模型首次自动下载到 `models/vad/`）→ **逐段质检丢弃**（非语音段
+必然不在段表内；<150ms 孤立段按爆音丢；|x|>0.98 占比>2% 的段按
+削波失真丢）→ 保留段之间截断原静音缝(≤300ms)拼接 + 10ms 余弦
+淡化 → RMS 归一 -25dBFS。
 
-之后把 `--inbox` 换成 `inbox_clean` 继续走 2)~4)，数据集另存 v2
-（冻结集不可变，预处理产物 = 新版本）：
+报告 `preprocess_report.jsonl` 逐文件记：duration_in/out、
+cut.segments_in/kept、cut.dropped[{ms,reason}]、removed_s、
+all_dropped flag（全段被丢→保留原音频待人工）。`--denoise`
+（ZipEnhancer）已弃用：16k 输出抹掉 ≥8kHz 音色细节，且实测
+磨砂感并非底噪。
+
+注意：VAD 只切"非语音"边界——段内的呼吸声/口水音切不掉；
+数据集本已人工筛过时剪切量会很小（爱弥斯 223 条仅剪 29s，
+全是首尾静音缝），此时磨砂另有来源。
+
+之后把 `--inbox` 换成 `inbox_clean` 继续走 2)~4)，数据集另存
+新版本（冻结集不可变，预处理产物 = 新版本）：
 
 ```bat
 .venv\Scripts\python.exe scripts\ingest\standardize_inbox.py ^
     --inbox data\characters\<id>\inbox_clean ^
-    --pool data\characters\<id>\datasets\v2\audio ^
-    --index data\characters\<id>\datasets\v2\index.jsonl
+    --pool data\characters\<id>\datasets\v<N>\audio ^
+    --index data\characters\<id>\datasets\v<N>\index.jsonl
 .venv\Scripts\python.exe scripts\ingest\freeze_dataset.py ^
-    --index data\characters\<id>\datasets\v2\index.jsonl ^
-    --pool  data\characters\<id>\datasets\v2\audio ^
-    --dataset-dir data\characters\<id>\datasets\v2
+    --index data\characters\<id>\datasets\v<N>\index.jsonl ^
+    --pool  data\characters\<id>\datasets\v<N>\audio ^
+    --dataset-dir data\characters\<id>\datasets\v<N>
 .venv\Scripts\python.exe scripts\ingest\audit_dataset.py ^
-    --dataset data\characters\<id>\datasets\v2
+    --dataset data\characters\<id>\datasets\v<N>
 ```
 
 ### 2) 标准化

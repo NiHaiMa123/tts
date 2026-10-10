@@ -3,17 +3,20 @@
 用法：
     .venv/Scripts/python scripts/ingest/preprocess_audio.py \
         --inbox data/characters/<id>/inbox \
-        --out   data/characters/<id>/inbox_clean [--denoise]
+        --out   data/characters/<id>/inbox_clean --cut
 
 默认操作链（可用 --no-* 关闭单项）：
-    trim     能量门静音裁剪（首尾，保留 80ms padding）
     hp       70Hz 高通（去隆隆声/直流漂移）
     loudness RMS 归一化到 -25dBFS（峰值≤0.98 防爆音）
-    denoise  ZipEnhancer ANS（可选，经 voxcpm env 子进程；
-             输出 16k 重采样回 48k，有效带宽 ≤8kHz——VoxCPM2 编码器
-             输入本来就是 16k，对训练无损，provenance 如实记录）
+    cut      VAD 剪切（--cut 启用，推荐）：FSMN-VAD 经 asr env
+             子进程检测语音段，删除非语音段/过短爆音段/削波失真段，
+             保留段之间截断原静音缝(≤300ms)拼接，边界 10ms 余弦
+             淡化防爆音——把数据集里"质量差的片段"整段剪掉
+    trim     能量门静音裁剪（首尾；cut 启用时自动跳过）
+    denoise  ZipEnhancer ANS（已弃用：16k 输出抹掉音色细节，
+             实测磨砂感来自数据声学签名，剪切才是对症方案）
 
-写 <out>/preprocess_report.jsonl（逐文件操作+时长变化）。
+写 <out>/preprocess_report.jsonl（逐文件操作+剪切统计+时长变化）。
 原 inbox 不动；之后照常 assess → standardize（指向 clean 目录）。
 """
 from __future__ import annotations
@@ -32,6 +35,47 @@ from character_tts.registry.loader import repo_root  # noqa: E402
 
 VOXCPM_PY = Path("backend_envs/voxcpm2/Scripts/python.exe")
 DENOISE_HELPER = Path("scripts/ingest/_denoise_zipenhancer.py")
+ASR_PY = Path("backend_envs/asr_sensevoice/Scripts/python.exe")
+VAD_HELPER = Path("scripts/ingest/_vad_fsmn.py")
+
+
+def _vad_batch(wavs: list[Path]) -> dict[str, list]:
+    """Run FSMN-VAD over files inside asr env → {file: segments_ms}."""
+    root = repo_root()
+    py = root / ASR_PY
+    helper = root / VAD_HELPER
+    if not py.is_file():
+        print(f"[vad] asr env 不存在: {py}", file=sys.stderr)
+        return {}
+    with tempfile.TemporaryDirectory(prefix="vad_") as td:
+        td = Path(td)
+        files_in = td / "files.jsonl"
+        files_in.write_text("".join(
+            json.dumps({"in": str(w)}, ensure_ascii=False) + "\n"
+            for w in wavs), encoding="utf-8")
+        out_f = td / "segments.jsonl"
+        print(f"[vad] {len(wavs)} 条送 FSMN-VAD…")
+        proc = subprocess.run([str(py), str(helper), str(files_in),
+                               str(out_f)], cwd=str(root),
+                              capture_output=True)
+        err = (proc.stderr or b"").decode("utf-8", errors="replace")
+        out = (proc.stdout or b"").decode("utf-8", errors="replace")
+        sys.stderr.write(err[-2000:])
+        print(out.strip().splitlines()[-1] if out.strip() else
+              "[vad] no output")
+        segmap, errs = {}, []
+        if out_f.is_file():
+            for line in out_f.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                r = json.loads(line)
+                segmap[r["in"]] = r["segments"]
+                if r.get("error"):
+                    errs.append(r["in"])
+        if errs:
+            print(f"[vad] {len(errs)} 条失败（按未剪切处理）",
+                  file=sys.stderr)
+        return segmap
 
 
 def _denoise_batch(pairs: list[dict]) -> dict[str, bool]:
@@ -64,8 +108,10 @@ def main() -> int:
     ap.add_argument("--no-trim", action="store_true")
     ap.add_argument("--no-hp", action="store_true")
     ap.add_argument("--no-loudness", action="store_true")
+    ap.add_argument("--cut", action="store_true",
+                    help="VAD 剪切（asr env 子进程，推荐）")
     ap.add_argument("--denoise", action="store_true",
-                    help="ZipEnhancer ANS（voxcpm env 子进程，慢）")
+                    help="ZipEnhancer ANS（已弃用）")
     ap.add_argument("--trim-db", type=float, default=-45.0)
     ap.add_argument("--hp-hz", type=float, default=70.0)
     ap.add_argument("--target-dbfs", type=float, default=-25.0)
@@ -83,10 +129,15 @@ def main() -> int:
     ops = {"trim": not args.no_trim, "hp": not args.no_hp,
            "loudness": not args.no_loudness, "trim_db": args.trim_db,
            "hp_hz": args.hp_hz, "target_dbfs": args.target_dbfs,
-           "denoise": args.denoise}
+           "denoise": args.denoise, "cut": args.cut}
 
-    # 第一遍：DSP 链（trim/hp/loudness 前的去噪应先做——ANS 对未裁剪
-    # 原始输入更稳）。denoise 的原始 → 临时16k → 重采样48k → DSP链。
+    # 第一遍：外部模型段（denoise 或 VAD）批量跑，再逐文件 DSP。
+    segmap = {}
+    if args.cut:
+        segmap = _vad_batch(wavs)
+        if not segmap:
+            print("[cut] VAD 无产出，全部按未剪切处理", file=sys.stderr)
+
     rows, dn_pairs = [], []
     tmp_dir = None
     if args.denoise:
@@ -115,7 +166,7 @@ def main() -> int:
             g = math.gcd(sr16, DEFAULT_SR)
             x = resample_poly(np.asarray(x16, dtype=np.float32),
                               DEFAULT_SR // g, sr16 // g)
-            out = preprocess_wav(x, DEFAULT_SR, **{
+            out, _st = preprocess_wav(x, DEFAULT_SR, **{
                 k: v for k, v in ops.items() if k != "denoise"})
             dst.parent.mkdir(parents=True, exist_ok=True)
             sf.write(str(dst), out, DEFAULT_SR, subtype="PCM_16")
@@ -126,7 +177,10 @@ def main() -> int:
                    "denoise": True,
                    "bandwidth_note": "denoise: 模型输出16k,有效带宽≤8kHz"}
         else:
-            row = preprocess_file(w, dst, ops=ops)
+            row = preprocess_file(w, dst, ops=ops,
+                                  segments_ms=segmap.get(str(w)))
+            if args.cut and str(w) not in segmap:
+                row["cut"] = {"error": "vad_missing"}
             if args.denoise:
                 row["denoise"] = False
                 row["denoise_error"] = "denoise 未产出，已按未降噪处理"
@@ -140,8 +194,15 @@ def main() -> int:
     report.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n"
                               for r in rows), encoding="utf-8")
     n_dn = sum(1 for r in rows if r.get("denoise"))
+    n_cut = sum(1 for r in rows
+                if isinstance(r.get("cut"), dict)
+                and r["cut"].get("segments_kept"))
+    n_flag = sum(1 for r in rows
+                 if isinstance(r.get("cut"), dict)
+                 and r["cut"].get("all_dropped"))
     print(f"[preprocess] {len(rows)} 条 → {out_dir}  "
-          f"denoise={n_dn}  report={report}")
+          f"cut={n_cut} all_dropped={n_flag} denoise={n_dn}  "
+          f"report={report}")
     return 0
 
 

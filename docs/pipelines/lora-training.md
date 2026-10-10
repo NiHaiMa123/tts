@@ -26,15 +26,16 @@
 
 ### ⓪ 数据清洗（若零样本"清澈"而 LoRA"磨砂"，先怀疑数据声学签名）
 
-LoRA 会把训练集的底噪/编码痕迹学进 DiT——爱弥斯实测全量 LoRA 习惯
-更像但磨砂。解法不是滤语气词（多数数据集本来就没几条），而是
-**预处理 inbox → 数据集 v2 → 重训**，见 `voice-assets.md` 1b：
+LoRA 会把训练集的差质量片段学进 DiT——爱弥斯实测全量 LoRA 习惯
+更像但磨砂。解法不是滤语气词，也不是降噪（ZipEnhancer 16k 会抹
+音色细节），而是 **VAD 剪切差片段 → 数据集新版本 → 重训**，见
+`voice-assets.md` 1b：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\ingest\preprocess_audio.py `
     --inbox data\characters\<id>\inbox `
-    --out   data\characters\<id>\inbox_clean --denoise
-# 然后 standardize+freeze 到 datasets\v2，train/val manifest 指 v2
+    --out   data\characters\<id>\inbox_clean --cut
+# 然后 standardize+freeze 到 datasets\v<N>，train/val manifest 指 v<N>
 ```
 
 ### ① 数据准备（防泄漏导出）

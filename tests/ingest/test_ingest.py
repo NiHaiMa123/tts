@@ -297,6 +297,79 @@ def test_highpass_removes_dc():
     assert np.abs(out[1000:-1000]).mean() < 0.01   # 稳态直流被压掉
 
 
+def _tone(sr, dur_s, amp=0.1, hz=330):
+    import numpy as np
+    n = int(sr * dur_s)
+    return np.sin(2 * np.pi * hz * np.arange(n) / sr) * amp
+
+
+def test_cut_segments_drops_nonspeech_and_clipped():
+    import numpy as np
+    from character_tts.ingest.preprocess import cut_segments
+    sr = 48000
+    speech1 = _tone(sr, 1.0)
+    noise = np.random.RandomState(0).randn(int(sr * 2.0)) * 0.02
+    speech2 = _tone(sr, 1.0, hz=220)
+    clipped = np.ones(int(sr * 0.3), dtype=np.float32)   # 全削波
+    speech3 = _tone(sr, 0.8, hz=440)
+    x = np.concatenate([np.zeros(int(sr * 0.5)), speech1, noise,
+                        speech2, np.zeros(int(sr * 0.1)), clipped,
+                        speech3, np.zeros(int(sr * 0.5))]).astype(np.float32)
+    # VAD 段（ms）：speech1、speech2、clipped、speech3
+    base = 0.5 * 1000
+    segs = [[base, base + 1000],
+            [base + 3000, base + 4000],
+            [base + 4100, base + 4400],
+            [base + 4400, base + 5200]]
+    out, st = cut_segments(x, sr, segs, keep_gap_ms=300, min_seg_ms=100)
+    assert st["segments_in"] == 4 and st["segments_kept"] == 3
+    assert st["dropped"][0]["reason"] == "clipped"
+    # 噪声段被移除、首尾静音被移除 → 明显变短
+    assert st["removed_s"] > 2.0
+    # 保留段间缝 ≤300ms：3段语音 + 2段缝 ≈ 3.4s
+    assert 2.8 < len(out) / sr < 3.6
+    assert np.isfinite(out).all()
+
+
+def test_cut_segments_too_short_and_all_dropped():
+    import numpy as np
+    from character_tts.ingest.preprocess import cut_segments
+    sr = 48000
+    x = _tone(sr, 1.0).astype(np.float32)
+    out, st = cut_segments(x, sr, [[0, 50], [500, 520]],
+                           min_seg_ms=150)
+    assert st["all_dropped"] and len(out) == len(x)   # 全丢→原样+flag
+
+
+def test_cut_segments_no_segments():
+    import numpy as np
+    from character_tts.ingest.preprocess import cut_segments
+    x = _tone(48000, 0.5).astype(np.float32)
+    out, st = cut_segments(x, 48000, [])
+    assert st["all_dropped"] and len(out) == len(x)
+
+
+def test_preprocess_file_with_cut(tmp_path):
+    import numpy as np
+    import soundfile as sf
+    from character_tts.ingest.preprocess import preprocess_file
+    sr = 48000
+    src = tmp_path / "a.wav"
+    x = np.concatenate([np.zeros(int(sr * 0.3)),
+                        _tone(sr, 1.0),
+                        np.random.RandomState(1).randn(int(sr * 1.0)) * 0.02,
+                        _tone(sr, 1.0, hz=250)]).astype(np.float32)
+    sf.write(str(src), x, sr)
+    dst = tmp_path / "out" / "a.wav"
+    row = preprocess_file(src, dst,
+                          ops={"hp": True, "loudness": True, "cut": True},
+                          segments_ms=[[300, 1300], [2300, 3300]])
+    w, _ = sf.read(str(dst))
+    assert row["cut"]["segments_kept"] == 2
+    assert row["cut"]["removed_s"] > 0.5
+    assert row["duration_out"] < row["duration_in"]
+
+
 def test_preprocess_file_writes_pcm16(tmp_path):
     import numpy as np
     import soundfile as sf
