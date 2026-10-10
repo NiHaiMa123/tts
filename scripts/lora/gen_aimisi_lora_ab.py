@@ -1,9 +1,11 @@
 """一次性：对每个 LoRA ckpt 生成《睡眠》分块版，供 A/B 对比。
 
 用法（voxcpm2 env）：
-    backend_envs/voxcpm2/Scripts/python.exe scripts/lora/gen_aimisi_lora_ab.py
+    backend_envs/voxcpm2/Scripts/python.exe scripts/lora/gen_aimisi_lora_ab.py \
+        [--ckpt-root outputs/training/aimisi_voxcpm_lora_pilot/checkpoints] \
+        [--out outputs/_tmp/lora_ab]
 
-产物：outputs/_tmp/lora_ab/{base,step50,step100,step150}/睡眠.wav + .json
+产物：<out>/{base,step50,step100,step150}/睡眠.wav + .json
 """
 import sys, os, json, time
 from pathlib import Path
@@ -92,7 +94,14 @@ def run_one(tag: str, lora_weights: str | None):
 
 
 if __name__ == "__main__":
-    only = sys.argv[1:] or None
+    args = [a for a in sys.argv[1:]]
+    for i, a in enumerate(list(args)):
+        if a == "--ckpt-root":
+            CKPT_ROOT = Path(args[i + 1]); del args[i:i + 2]; break
+    for i, a in enumerate(list(args)):
+        if a == "--out":
+            OUT = Path(args[i + 1]); del args[i:i + 2]; break
+    only = args or None
     for tag, ck in [("step50", "step_0000050"), ("step100", "step_0000100"),
                     ("step150", "step_0000150")]:
         if only and tag not in only:
