@@ -246,6 +246,71 @@ def test_serve_review_endpoints(tmp_path):
 
 # ---------- provenance / import / audit / enrich ----------
 
+# ---------- preprocess (trim / hp / loudness) ----------
+
+def test_trim_silence_cuts_edges():
+    import numpy as np
+    from character_tts.ingest.preprocess import trim_silence
+    sr = 48000
+    tone = np.sin(2 * np.pi * 440 * np.arange(sr) / sr).astype(np.float32) * 0.5
+    wav = np.concatenate([np.zeros(sr), tone, np.zeros(sr)])
+    out = trim_silence(wav, sr, pad_ms=50)
+    assert len(out) < len(wav)
+    assert len(out) >= sr                      # 语音主体全保留
+    assert np.abs(out).max() > 0.4
+
+
+def test_trim_keeps_quiet_tail_inside():
+    import numpy as np
+    from character_tts.ingest.preprocess import trim_silence
+    sr = 48000
+    x = np.concatenate([
+        np.zeros(int(sr * 0.5)),
+        np.ones(int(sr * 0.3)).astype(np.float32) * 0.5,
+        np.zeros(int(sr * 0.5)),
+    ])
+    out = trim_silence(x, sr, pad_ms=80)
+    assert len(out) < len(x)
+    assert np.abs(out).max() > 0.4
+
+
+def test_normalize_loudness_hits_target_and_ceiling():
+    import numpy as np
+    from character_tts.ingest.preprocess import normalize_loudness
+    sr = 48000
+    quiet = np.sin(2 * np.pi * 220 * np.arange(sr) / sr) * 0.01
+    out = normalize_loudness(quiet, target_rms_dbfs=-25.0)
+    rms_db = 20 * np.log10(np.sqrt((out ** 2).mean()))
+    assert abs(rms_db - (-25.0)) < 0.5
+    loud = np.ones(sr).astype(np.float32) * 0.9
+    out2 = normalize_loudness(loud, target_rms_dbfs=-5.0,
+                              peak_ceiling=0.98)
+    assert np.abs(out2).max() <= 0.98 + 1e-6
+
+
+def test_highpass_removes_dc():
+    import numpy as np
+    from character_tts.ingest.preprocess import highpass
+    sr = 48000
+    x = np.ones(sr).astype(np.float32) * 0.5
+    out = highpass(x, sr)
+    assert np.abs(out[1000:-1000]).mean() < 0.01   # 稳态直流被压掉
+
+
+def test_preprocess_file_writes_pcm16(tmp_path):
+    import numpy as np
+    import soundfile as sf
+    from character_tts.ingest.preprocess import preprocess_file
+    src = tmp_path / "a.wav"
+    x = np.sin(2 * np.pi * 330 * np.arange(48000) / 48000) * 0.05
+    sf.write(str(src), x.astype(np.float32), 48000)
+    dst = tmp_path / "out" / "a.wav"
+    row = preprocess_file(src, dst)
+    w, sr = sf.read(str(dst))
+    assert sr == 48000 and row["duration_out"] > 0
+    assert "ops" in row
+
+
 def test_numeric_suffix_is_no_text(tmp_path):
     p = tmp_path / "中立_neutral" / "【中立_neutral】_10.wav"
     p.parent.mkdir()

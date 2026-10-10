@@ -72,6 +72,14 @@ class VoxCPMWorker(WorkerServer):
         revision = self.model_cfg.get("revision")
         if revision and (sig is None or "revision" in sig.parameters):
             kwargs["revision"] = revision
+        lora = self.model_cfg.get("lora") or {}
+        if lora.get("weights"):
+            from voxcpm.model.voxcpm2 import LoRAConfig as LoRAConfigV2
+            cfgd = {k: lora[k] for k in
+                    ("enable_lm", "enable_dit", "enable_proj",
+                     "r", "alpha", "dropout") if k in lora}
+            kwargs["lora_config"] = LoRAConfigV2(**cfgd)
+            kwargs["lora_weights_path"] = str(lora["weights"])
         self.emit_log(f"loading VoxCPM.from_pretrained({model_id!r}, {kwargs})")
         self._model = VoxCPM.from_pretrained(model_id, **kwargs)
         return self._model

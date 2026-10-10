@@ -52,8 +52,9 @@ src/character_tts/
 scripts/
   start_webui.py              # WebUI 入口（启动TTS.vbs 的目标，勿移）
   asr_check.py                # ASR 辅助检查（三后端统一入口）
-  ingest/                     # 入库 CLI：import/assess/standardize/
-                              #   speaker_check/enrich/review/freeze/audit
+  ingest/                     # 入库 CLI：import/assess/preprocess/
+                              #   standardize/speaker_check/enrich/
+                              #   review/freeze/audit（预处理见下）
   eval/                       # 评测/实验 runner + 评分导出
     run_gate.py  run_voxcpm_phase5a.py  run_voxcpm_phase5a2.py
     export_*_ratings.py

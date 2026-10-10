@@ -78,6 +78,40 @@ data/characters/<id>/inbox/<情绪_标签>/【<情绪>】<台词>.wav
     --inbox data\characters\<id>\inbox --out outputs\_tmp\assess_<id>.json
 ```
 
+### 1b) 预处理（可选但建议：解包音源去噪清洗）
+
+游戏解包音（wem→wav）常带底噪/编码伪影/首尾静音/响度不一——
+**LoRA 会把这些声学签名学走（听感"磨砂"）**。清洗到镜像目录，
+原 inbox 不动：
+
+```bat
+.venv\Scripts\python.exe scripts\ingest\preprocess_audio.py ^
+    --inbox data\characters\<id>\inbox ^
+    --out   data\characters\<id>\inbox_clean [--denoise]
+```
+
+默认链：trim(能量门裁首尾静音,留80ms) → 70Hz高通 → RMS归一-25dBFS。
+`--denoise` 追加 ZipEnhancer ANS（voxcpm env 子进程，模型首次自动
+下载）：输出 16k 重采样回 48k，**有效带宽≤8kHz**——对 VoxCPM2 训练
+无损（编码输入本来就是 16k），写 `preprocess_report.jsonl` 如实记录。
+注意带宽损失同样作用于参考音候选：要挑参考音请从**未降噪 inbox**挑。
+
+之后把 `--inbox` 换成 `inbox_clean` 继续走 2)~4)，数据集另存 v2
+（冻结集不可变，预处理产物 = 新版本）：
+
+```bat
+.venv\Scripts\python.exe scripts\ingest\standardize_inbox.py ^
+    --inbox data\characters\<id>\inbox_clean ^
+    --pool data\characters\<id>\datasets\v2\audio ^
+    --index data\characters\<id>\datasets\v2\index.jsonl
+.venv\Scripts\python.exe scripts\ingest\freeze_dataset.py ^
+    --index data\characters\<id>\datasets\v2\index.jsonl ^
+    --pool  data\characters\<id>\datasets\v2\audio ^
+    --dataset-dir data\characters\<id>\datasets\v2
+.venv\Scripts\python.exe scripts\ingest\audit_dataset.py ^
+    --dataset data\characters\<id>\datasets\v2
+```
+
 ### 2) 标准化
 
 ```bat

@@ -24,12 +24,29 @@
 
 ## 步骤
 
+### ⓪ 数据清洗（若零样本"清澈"而 LoRA"磨砂"，先怀疑数据声学签名）
+
+LoRA 会把训练集的底噪/编码痕迹学进 DiT——爱弥斯实测全量 LoRA 习惯
+更像但磨砂。解法不是滤语气词（多数数据集本来就没几条），而是
+**预处理 inbox → 数据集 v2 → 重训**，见 `voice-assets.md` 1b：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\ingest\preprocess_audio.py `
+    --inbox data\characters\<id>\inbox `
+    --out   data\characters\<id>\inbox_clean --denoise
+# 然后 standardize+freeze 到 datasets\v2，train/val manifest 指 v2
+```
+
 ### ① 数据准备（防泄漏导出）
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\lora\prepare_voxcpm_lora_data.py `
     --character aimisi
 # → outputs/training/aimisi_voxcpm_lora_pilot/{train.jsonl, val_metrics.jsonl, audit/}
+# 用预处理 v2 集训练时覆盖清单：
+#   --train-manifest data/characters/aimisi/datasets/v2/train.jsonl `
+#   --val-manifest   data/characters/aimisi/datasets/v2/validation.jsonl `
+#   --out-dir outputs/training/aimisi_lora_v2
 ```
 
 - 读角色 yaml 的 `dataset.train_manifest` / `validation_manifest`
