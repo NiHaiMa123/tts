@@ -130,3 +130,14 @@ VRAM 全程 nvidia-smi 采样。
   manager 停旧起新。
 - 已知残余问题：偶发「要破音」压嗓段仍存在（v1/v3 同源数据），
   后续可做 F0/HNR 紧张度检测剔样本重训 v4。
+
+## Qwen3-TTS LoRA 试验（2026-10，关闭）
+
+- 管线：官方 finetune + 社区 LoRA patch（r16α32，Q/K/V/O+MLP，
+  lr2e-6×10epoch），179 条 v3 数据，19.2M/1.95B 可训，loss 14.7→10.2。
+- **结论：失败**。零样本清晰但音色不够像角色；LoRA e9 在
+  scale 0.3/0.6 下输出破损扭曲，scale 1.0 直接 EOS 失控（33s→327s）。
+  判断：adapter 学坏了声学分布，非缩放问题；若要重试需换
+  数据配方/更小 lr 或只训 LM 子集。
+- 资产保留：`outputs/training/aimisi_qwen3_lora/`（jsonl+codes+10 个
+  ckpt）、`backend_envs/qwen3_tts/official_finetune/`（脚本）。
