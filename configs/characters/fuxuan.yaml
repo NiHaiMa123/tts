@@ -1,0 +1,26 @@
+character_id: fuxuan
+display_name: 符玄
+backend: voxcpm2
+dataset:
+  source: ludiglot_inbox
+  root: ${TTS_ROOT}/data/characters/fuxuan/datasets/v1
+  manifest: ${TTS_ROOT}/data/characters/fuxuan/datasets/v1/manifest.json
+  train_manifest: ${TTS_ROOT}/data/characters/fuxuan/datasets/v1/train.jsonl
+  validation_manifest: ${TTS_ROOT}/data/characters/fuxuan/datasets/v1/validation.jsonl
+  test_manifest: ${TTS_ROOT}/data/characters/fuxuan/datasets/v1/test.jsonl
+reference:
+  audio: ${TTS_ROOT}/assets/characters/fuxuan/reference/ref.wav
+  sha256: 3979b5566d8b62c0282d78e2114523b8747905a7ffd8232c0ed191d09ec364ba
+  text: 忆庭中各怀异志的人可不少，仅凭一句自报家门没法确认其中原委。
+adapters: {}
+generation:
+  # 零样本验收通过（fuxuan_zs_* 五情绪 A/B 试听）；与爱弥斯同 seed 惯例。
+  seed: 123
+postprocess: {}
+evaluation:
+  anchor_texts: []
+provenance:
+  imported_from: E:\project\dotstts
+  inbox: Ludiglot 导出 273 条（四情绪标签）
+  dataset: pipeline v1（VAD-cut 预处理 freeze，217/32/24，audit 0 违规）
+  backend_decision: 零样本即达标，共享 voxcpm2 后端，暂不训练 LoRA
