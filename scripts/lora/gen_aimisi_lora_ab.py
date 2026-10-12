@@ -23,7 +23,8 @@ LORA_CFG = {"enable_lm": True, "enable_dit": True, "enable_proj": False,
 REF_WAV = ("data/characters/aimisi/datasets/v1/audio/"
            "d8b99e88731cd1e6e9dc5bec4667ba75727adc843089d67b04e4bc503f00677a.wav")
 REF_TEXT = "啊……是陆医生。和他说话的时候，就当我不在吧？不然会被当成对着空气谈天的怪人哦。"
-TEXT = Path("inputs/睡眠.txt").read_text(encoding="utf-8")
+TEXT_PATH = Path("inputs/睡眠.txt")
+NAME = "睡眠"
 GEN = {"cfg_value": 2.0, "inference_timesteps": 10, "normalize": True,
        "denoise": False, "retry_badcase": True}
 
@@ -43,7 +44,8 @@ def run_one(tag: str, lora_weights: str | None):
         kwargs["lora_weights_path"] = lora_weights
     model = VoxCPM.from_pretrained(SNAP, **kwargs)
 
-    chunks = VoxCPMWorker._split_text(TEXT, 100)   # staticmethod 复用
+    chunks = VoxCPMWorker._split_text(
+        TEXT_PATH.read_text(encoding="utf-8"), 100)
     print(f"[{tag}] {len(chunks)} chunks, lora={lora_weights or 'none'}",
           flush=True)
     tts = model.tts_model
@@ -78,13 +80,15 @@ def run_one(tag: str, lora_weights: str | None):
     sr = int(getattr(tts, "sample_rate", 48000))
     d = OUT / tag
     d.mkdir(parents=True, exist_ok=True)
-    sf.write(str(d / "睡眠.wav"), np.asarray(wav, dtype=np.float32), sr)
+    sf.write(str(d / f"{NAME}.wav"), np.asarray(wav, dtype=np.float32),
+             sr)
     meta = {"tag": tag, "lora_weights": lora_weights, "lora": LORA_CFG,
             "ref": "d8b9", "seed_base": 42, "chunks": len(chunks),
             "duration": round(len(wav) / sr, 2),
             "wall_seconds": round(time.monotonic() - t0, 1),
             "gen": GEN}
-    (d / "睡眠.wav.json").write_text(
+    meta["text"] = str(TEXT_PATH)
+    (d / f"{NAME}.wav.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[{tag}] done {meta['duration']}s wall={meta['wall_seconds']}s",
           flush=True)
@@ -101,6 +105,12 @@ if __name__ == "__main__":
     for i, a in enumerate(list(args)):
         if a == "--out":
             OUT = Path(args[i + 1]); del args[i:i + 2]; break
+    for i, a in enumerate(list(args)):
+        if a == "--text":
+            TEXT_PATH = Path(args[i + 1]); del args[i:i + 2]; break
+    for i, a in enumerate(list(args)):
+        if a == "--name":
+            NAME = args[i + 1]; del args[i:i + 2]; break
     only = args or None
     for tag, ck in [("step50", "step_0000050"), ("step100", "step_0000100"),
                     ("step150", "step_0000150")]:

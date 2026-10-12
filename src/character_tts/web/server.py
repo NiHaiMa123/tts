@@ -531,6 +531,7 @@ def create_app(manager: BackendManager | None = None):
                 session.transition("loading_model",
                                    f"正在加载后端 {backend_id}…")
                 client = manager.ensure(profile)
+                seed = int(character.generation.get("seed", 42))
                 total = len(files)
                 for i, txt_path in enumerate(files):
                     text = txt_path.read_text(encoding="utf-8").strip()
@@ -552,7 +553,7 @@ def create_app(manager: BackendManager | None = None):
                         text=text, output_path=str(out_path),
                         reference_audio=character.reference_audio,
                         reference_text=character.reference_text,
-                        seed=42, options={}, timeout=1800)
+                        seed=seed, options={}, timeout=1800)
                     # Provenance sidecar — similarity audits need to know
                     # which reference/seed/params produced each wav.
                     sidecar = {
@@ -562,7 +563,7 @@ def create_app(manager: BackendManager | None = None):
                         "text_sha256": hashlib.sha256(
                             text.encode("utf-8")).hexdigest(),
                         "text_chars": len(text),
-                        "seed": 42,
+                        "seed": seed,
                         "reference": {
                             "audio": character.reference_audio,
                             "sha256": character.reference_sha256,

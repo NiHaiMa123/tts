@@ -1,0 +1,50 @@
+backend_id: voxcpm2_aimisi
+family: voxcpm
+enabled: true
+
+worker:
+  python: backend_envs/voxcpm2/Scripts/python.exe
+  cwd: .
+  script: workers/voxcpm_worker.py
+  startup_timeout_seconds: 900
+  env:
+    # Model is pre-downloaded by bootstrap; runtime must not hit network.
+    HF_HUB_OFFLINE: "1"
+
+model:
+  path_or_id: openbmb/VoxCPM2
+  revision: 32279effe8c19989596f05d353d1447f51d9e915
+  # 爱弥斯专属 LoRA（v3 VAD 剪切数据集，150 步）。
+  # 人耳评审结论：v3 音色更像、v1 节奏略优但差距小；s123 破音最少。
+  lora:
+    weights: outputs/training/aimisi_lora_v3/checkpoints/step_0000150/lora_weights.safetensors
+    enable_lm: true
+    enable_dit: true
+    enable_proj: false
+    r: 16
+    alpha: 16
+    dropout: 0.0
+
+cache:
+  root: ${TTS_MODEL_ROOT:hf_cache}/voxcpm2
+
+runtime:
+  load_denoiser: false
+  local_files_only: true
+  precision: bfloat16
+
+generation:
+  cfg_value: 2.0
+  inference_timesteps: 10
+  normalize: true
+  denoise: false
+  retry_badcase: true
+  # 长文本分句上限（字）；超过则按句切块分别生成再拼接——
+  # 长 continuation 会随时间漂离参考音（实测 250s 生成 cos 0.6->0.48），
+  # 每块从 prompt cache 重锚定可保持音色。设 0 关闭。
+  chunk_chars: 100
+
+notes: >
+  爱弥斯专属 VoxCPM2 实例：模型同 voxcpm2.yaml，但启动时注入
+  v3 LoRA（step150）。与共享 voxcpm2 worker 互斥——切换角色时
+  manager 会先停旧 worker 再拉起本实例。

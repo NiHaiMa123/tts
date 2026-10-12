@@ -1,0 +1,8 @@
+{
+  "selected": "ref_d8b9.wav",
+  "sha256": "d8b99e88731cd1e6e9dc5bec4667ba75727adc843089d67b04e4bc503f00677a",
+  "source": "datasets/v1 训练样本 d8b99e88",
+  "reason": "克隆锚点实测最优：同句同 seed 六候选 ×3 seed 均值 cos_centroid 0.899（原 ref 0.842）；长文分窗 0.91-0.93 稳定",
+  "text": "啊……是陆医生。和他说话的时候，就当我不在吧？不然会被当成对着空气谈天的怪人哦。",
+  "note": "ref.wav(39d0) 保留未删，可作 A/B 回退"
+}

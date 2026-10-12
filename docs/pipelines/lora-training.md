@@ -114,3 +114,19 @@ VRAM 全程 nvidia-smi 采样。
 - 训练不动推理 env、不动生产角色 yaml；一切在 `outputs/training/` 沙箱
 - 冻结数据集不可变；要换数据先 freeze v2
 - 人耳 > 一切指标；LoRA 默认不升级，证明有效才转正
+
+## 爱弥斯生产预设（2026-10 人耳评审结论）
+
+- **adapter**：`outputs/training/aimisi_lora_v3/checkpoints/step_0000150`
+  （v3 VAD 剪切数据，LM+DiT r16α16）。v3 vs v1：音色更像；v1 节奏
+  略优但差距不足以翻盘；v2 降噪版已弃。
+- **参考音**：`assets/characters/aimisi/reference/ref_d8b9.wav`
+  （克隆锚点实测最优，cos_centroid 0.899 vs 旧 ref 0.842）。
+- **seed**：123（crack_* A/B：s42/s123/cfg15/t15/ref39d0/step100 七变量
+  盲评，s123 压嗓毛刺最少——破音部分来自采样运气）。
+- **接线**：专属后端 `configs/backends/voxcpm2_aimisi.yaml`
+  （`model.lora` 注入），角色 yaml `backend: voxcpm2_aimisi` +
+  `generation.seed: 123`；与共享 voxcpm2 worker 互斥，切角色时
+  manager 停旧起新。
+- 已知残余问题：偶发「要破音」压嗓段仍存在（v1/v3 同源数据），
+  后续可做 F0/HNR 紧张度检测剔样本重训 v4。

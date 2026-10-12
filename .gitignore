@@ -18,6 +18,9 @@ outputs/*
 models/
 hf_cache/
 
+# Third-party TTS repos cloned for inference/training (have own .git)
+external/
+
 # Character source audio / datasets (large binaries; registry yaml keeps paths)
 data/
 *.wav

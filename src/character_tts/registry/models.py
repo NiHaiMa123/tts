@@ -39,6 +39,7 @@ class CharacterProfile:
     dataset: dict[str, Any]
     reference: dict[str, Any]
     backend: str | None = None
+    generation: dict[str, Any] = field(default_factory=dict)
     adapters: dict[str, Any] = field(default_factory=dict)
     postprocess: dict[str, Any] = field(default_factory=dict)
     evaluation: dict[str, Any] = field(default_factory=dict)

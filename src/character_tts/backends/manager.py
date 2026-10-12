@@ -185,6 +185,10 @@ class BackendManager:
         for key in ("adapter", "tokenizer", "cache_dir"):
             if model_cfg.get(key):
                 model_cfg[key] = self._resolve_model_path(str(model_cfg[key]))
+        lora_cfg = model_cfg.get("lora") or {}
+        if lora_cfg.get("weights"):
+            lora_cfg["weights"] = self._resolve_model_path(
+                str(lora_cfg["weights"]))
         cache_cfg = dict(profile.cache)
         if cache_cfg.get("root"):
             cache_cfg["root"] = self._resolve_under_repo(str(cache_cfg["root"]))

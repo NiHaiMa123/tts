@@ -1,6 +1,6 @@
 character_id: aimisi
 display_name: 爱弥斯
-backend: voxcpm2
+backend: voxcpm2_aimisi
 dataset:
   source: curated_inbox
   root: ${TTS_ROOT}/data/characters/aimisi/datasets/v1
@@ -9,9 +9,13 @@ dataset:
   validation_manifest: ${TTS_ROOT}/data/characters/aimisi/datasets/v1/validation.jsonl
   test_manifest: ${TTS_ROOT}/data/characters/aimisi/datasets/v1/test.jsonl
 reference:
-  audio: ${TTS_ROOT}/assets/characters/aimisi/reference/ref.wav
-  sha256: 39d0eee0da6bde4b62f44abcf17b3b1fe854d7734d578f6dd386d904f977c48a
-  text: 这些歌，本来也只是为了表达自我而写。我写的时候，没想过会有这么多人想听。
+  audio: ${TTS_ROOT}/assets/characters/aimisi/reference/ref_d8b9.wav
+  sha256: d8b99e88731cd1e6e9dc5bec4667ba75727adc843089d67b04e4bc503f00677a
+  text: 啊……是陆医生。和他说话的时候，就当我不在吧？不然会被当成对着空气谈天的怪人哦。
+generation:
+  # 人耳盲评（crack_* A/B）：seed123 的破音/压嗓毛刺最少；保持奇数偏移
+  # 以便与历史 seed42 产物区分。chunk 内 worker 按 seed+i 逐块偏移。
+  seed: 123
 adapters: {}
 postprocess: {}
 evaluation:
