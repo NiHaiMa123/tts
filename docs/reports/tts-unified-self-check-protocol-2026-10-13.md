@@ -1,10 +1,12 @@
 # TTS 统一自检流程：音色、音质、韵律与内容的计算评分
 
+> **评分方法研究与定义**：本文保留论文、算法、公式、校准、预算和验收依据。每次运行的操作步骤及 Agent 实施任务统一见 [自检规范](../pipelines/self-check.md)，当前完成状态见 [PLAN](../../PLAN.md)。
+
 - 调研日期：2026-10-13，中国标准时间。
 - 项目：`NiHaiMa123/tts`；读取基线 `ccad07752f7b260e7637b718bbc622d7b5fe5c52`。
 - 目标：让 Index、Vox、Fish、Qwen 及其 adapter 共用评价输入、指标定义、校准和结果格式，发现音色不够像、磨砂、破损、节奏异常和停止失控。
 - 相关报告：[项目音质审查](tts-quality-review-2026-10-13.md)、[开源能力边界](open-source-tts-capability-boundaries-2026-10-13.md)、[Qwen 训练破损专项](qwen3-tts-training-distortion-audit-2026-10-13.md)。
-- 本次交付：研究及可执行的实施规范。已读取论文、官方代码和项目评价代码；**没有运行音频评分模型、没有计算本地 WAV 的真实分数。** 同日已补充实现统一试听模板、本地保存和 Agent 读取流程，见 [统一试听页](../pipelines/listening-review.md)。下文拟新增的自动评分程序和接口尚不存在，需要 Agent 实施。
+- 本次交付：方法研究与协议定义。已读取论文、官方代码和项目评价代码；**没有运行音频评分模型、没有计算本地 WAV 的真实分数。** 同日实现了统一试听、本地保存与 Agent 读取。自动评分程序和项目校准尚待实施，任务已归入 [自检规范](../pipelines/self-check.md)。
 
 ## 1. 要建立什么样的自检
 
@@ -112,28 +114,11 @@
 
 ## 5. 每次修改后的统一运行步骤
 
-| 步骤 | 输入与操作 | 输出 / 失败处理 |
-|---|---|---|
-| 0. 留证 | 记录 git/model/tokenizer/adapter/数据清单 hash、真实生成参数、参考、预处理、seed、重试 | `run.json`；关键身份缺失则 BLOCKED |
-| 1. 计算契约 | 对新训练路线检查训练/推理对齐、零更新 adapter、保存加载、合并等 | `implementation_checks.json`；失败则停止升级，不用音频分数覆盖 |
-| 2. 生成或收集 | 基线与候选共用生产 worker 路径；优先复用身份与输入完全一致的缓存 | 原始 WAV、生成 sidecar、manifest；每次重试都保留 |
-| 3. 基础健康 | 解码、长度、NaN/Inf、全零、声道、采样率、PCM 饱和/平台段、停止和预算 | 明确的硬故障 FAIL；疑似削波/拖长输出 REVIEW 与时间点 |
-| 4. 内容 | 主 ASR、CER、编辑序列、关键词；疑似错误用第二 ASR | `content.json`；按已校准规则判断，识别器分歧 REVIEW |
-| 5. 身份 | gallery 与窗口 CAM++；按 profile 运行第二编码器/感知评分 | `speaker.json`；短音频或失效 embedding 不填零装作真实分数 |
-| 6. 音质 | UTMOSv2、SCOREQ；固定窗口及可选 NISQA/局部特征 | `quality.json`；整体与局部结果同时保留 |
-| 7. 韵律 | 内容有效后对齐；同文本分析曲线，否则分析习惯分布/异常 | `prosody.json`；没有原声时不输出虚假的曲线相似分数 |
-| 8. 校准及汇总 | 匹配校准 profile，比较固定基线与置信区间 | `verdict.json`、逐条 CSV 与 MD/HTML 报告 |
-| 9. 有限复核 | 呈现最差局部、指标冲突与域外样本的小型 A/B | 新标签作为下一版开发证据，不回头污染当前最终测试 |
-
-基础错误对所有底座通用。训练契约检查则是每条后端的特定前置项；Qwen 的四项训练不一致须先按专项报告核对，不能凭 UTMOS 高分宣布训练实现正确。
+运行顺序已归并至 [自检规范](../pipelines/self-check.md#每次自检的顺序)。本报告以下章节只展开计算定义、适用条件、校准、预算与验收，不另设任务顺序。
 
 ### 5.1 人工复核网页与 Agent 继续
 
-所有实验调用同一试听模板，复用播放、评分、备注、盲听顺序与疲劳交互。选择及备注经本地服务直接写入当前实验的评分 JSON，无导出或额外提交步骤。
-
-用户看到已保存后，在对话中说“继续”；Agent 用 `scripts/eval/read_listening.py --bundle <当前实验目录>` 读取真实文件，核对实验、音频 SHA 和已评/未评状态，再继续自检或既定迭代。未评价项保持 pending，疲劳不算平局；写盘失败、旧实验或变化的音频不能作当前人耳证据。
-
-旧页面仅需重新构建 HTML，不为更新模板重新生成 WAV。实施命令及保存协议见 [统一试听页](../pipelines/listening-review.md)。
+模板、保存文件、用户说“继续”和读取状态统一见 [试听规范](../pipelines/listening-review.md)。用户主观标签与本报告的计算结果分别保存；旧页面只更新 HTML，不为改模板重新合成 WAV。
 
 ## 6. 各维度如何计算
 
@@ -334,42 +319,23 @@ quick 与 qualification 是不同 profile，原始分数不能混作同一评分
 
 ## 11. 给执行 Agent 的实施任务
 
+实施任务及拟新增文件已归并至 [自检规范的实施顺序](../pipelines/self-check.md#实施顺序)，避免研究报告与操作规范产生两套执行命令。统一入口尚不存在；下面保留阶段名称供旧引用定位。
+
 ### 阶段 A：统一输入和原始评分
 
-拟新增：
-
-- `scripts/eval/run_selfcheck.py`：统一入口，支持现有 manifest 及 `quick/qualification/diagnostic` profile。
-- `src/character_tts/evaluation/selfcheck/`：评分适配器、资产检查、汇总与规则；不将新依赖直接塞进已有生成 worker。
-- `configs/evaluations/selfcheck_v1.yaml`：必需/可选指标、数据集、预处理、评分模式与预算。
-- `outputs/selfcheck/<run_id>/`：逐条/逐窗 JSONL、CSV、摘要、失败局部试听。
-
-入口命令是实施后的目标，当前还不能运行：
-
-```bash
-python scripts/eval/run_selfcheck.py --manifest <manifest.json> --profile quick --out <out_dir>
-```
-
-先复用已有 CAM++ 与 ASR，加入 UTMOSv2、SCOREQ-NR。全部指标通过固定接口返回：`status/value/unit/direction/model_revision/weights_sha256/config_sha256/audio_view/windows/error`。只生成原始评价，未校准阶段不宣布音色或音质 PASS。
+统一 manifest、评分适配器、原始值与输出字段；目标文件及 CLI 见操作规范。未校准不声明音色或音质 PASS。
 
 ### 阶段 B：定位和项目校准
 
-- 补齐 ASR 编辑路径、对齐时间与关键字。
-- 同文本原声的 F0/时长/停顿分析；跨句身份漂移。
-- 导入有 WAV/hash 的既有好坏标签；按第8节构建校准和有限 A/B。
-- 依据留出结果启用明确的自动判定范围。
+内容/韵律/身份漂移定位与项目校准，定义见第6和8节，执行任务见操作规范。
 
 ### 阶段 C：新方法是否值得升级
 
-用完全相同的 calibration/eval 分别检查 WavLM、VoiceMOS 感知评分头、DS-WED 与 NISQA；评估是否减少真实坏例漏检或假警报，以及时延成本。新方法只有名字更新、不增加有效证据，就不升级默认。
-
-CAL-MOS 等新预印本继续跟踪可部署代码与权重；不先投入训练大型评分器。小样本阶段优先校准已有表征和特征组合。
+在相同 calibration/eval 上评估 WavLM、VoiceMOS 感知头、DS-WED、NISQA 的增量价值；CAL-MOS 未核验可部署权重。
 
 ### 阶段 D：接入训练与发布评价
 
-- 每个保存点优先跑少量固定回归 case；前期密集检查，避免最后一轮才发现破损。
-- checkpoint 排序使用受约束的多维证据；loss、声纹或 MOS 不单独决定最优。
-- 发布候选运行 qualification；保留真实失败率和未解决 REVIEW。
-- 不将本评价器直接作为唯一可优化训练奖励；否则需要独立评分器与人工留出验证，防止把分数优化好而听感变差。[S4]
+checkpoint 回归及受约束发布评价；不能将本评价器直接作为唯一训练奖励，避免只优化评分而偏离听感。[S4]
 
 ## 12. 统一结果示例
 

@@ -1,5 +1,7 @@
 # Qwen3-TTS 专项核查：零样本清晰但不像，LoRA 后破损与停止失控
 
+> **Qwen 专项证据**：上游固定版本的源码问题已核对，实际本地训练路径仍待确认。当前任务顺序见 [PLAN](../../PLAN.md)，评分与复核见 [统一自检](../pipelines/self-check.md)；本文的条件训练建议不是已验证的修复结果。
+
 - 核查日期：2026-10-13。
 - 项目：`NiHaiMa123/tts`，读取时远端 `main` 为 `9da9af6fbea3cd12d86a8a1d96206fd6b13b5279`。
 - 官方代码：`QwenLM/Qwen3-TTS`，核查提交 `022e286b98fbec7e1e916cb940cdf532cd9f488e`。

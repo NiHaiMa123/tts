@@ -1,5 +1,7 @@
 # 锁暝 backend gate v1 — 平台验收报告（v2 修订）
 
+> **已完成的历史实验报告**：保留当时结果、评分与复现说明，不是当前任务入口。本文的 PLAN 章节指向 [归档计划](../archive/implementation-plan-through-2026-10-13.md)，当前状态与路线见 [PLAN](../../PLAN.md)。旧脚本路径随重构迁移，实际入口以现有 `scripts/eval/`、`scripts/lora/` 和 [操作规范](../README.md) 为准。
+
 - 评测 ID: `suoming_v1`
 - 角色: `suoming`（锁暝）
 - 生成时间: 2026-10-08（UTC+8）

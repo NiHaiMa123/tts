@@ -1,5 +1,7 @@
 # Phase 5C — VoxCPM2 LoRA 加载与生效审计（Audit v1）
 
+> **已完成的历史实验报告**：保留当时结果、评分与复现说明，不是当前任务入口。本文的 PLAN 章节指向 [归档计划](../archive/implementation-plan-through-2026-10-13.md)，当前状态与路线见 [PLAN](../../PLAN.md)。旧脚本路径随重构迁移，实际入口以现有 `scripts/eval/`、`scripts/lora/` 和 [操作规范](../README.md) 为准。
+
 日期：2026-10-08 · 审计 ID：`suoming_voxcpm_lora_effect_v1`
 最终判定：**`ADAPTER_EFFECTIVE_NO_CLEAR_GAIN`** —— LoRA 确实被完整加载、
 真实生效且可复现；Phase 5B 的对照条件可比性全部通过；既有用户 A/B

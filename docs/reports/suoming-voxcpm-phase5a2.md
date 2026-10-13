@@ -1,5 +1,7 @@
 # Phase 5A2 — VoxCPM2 P0/P2 短句稳定性配对对照
 
+> **已完成的历史实验报告**：保留当时结果、评分与复现说明，不是当前任务入口。本文的 PLAN 章节指向 [归档计划](../archive/implementation-plan-through-2026-10-13.md)，当前状态与路线见 [PLAN](../../PLAN.md)。旧脚本路径随重构迁移，实际入口以现有 `scripts/eval/`、`scripts/lora/` 和 [操作规范](../README.md) 为准。
+
 日期：2026-10-08 · 实验 ID：`suoming_voxcpm_phase5a2`
 状态：**14 格全部完成人工盲听（14/14 sha 校验通过）**
 

@@ -1,18 +1,15 @@
 # 角色语音资产管线（获取 → 入库）
 
+> 本文件负责获取、入库、审核、参考音选择与冻结。当前任务见 [PLAN](../../PLAN.md)；环境见 [environment.md](environment.md)；实验试听交互见 [listening-review.md](listening-review.md)。
+
 从游戏资源到「可注册角色」的完整链路。本项目只负责 **入库之后** 的环节；
-解包/提取由 **Ludiglot** 项目完成（`E:\project\Ludiglot`，原理文档见
-`docs/design/audio-system.md`）。
+解包/提取由 **Ludiglot** 项目完成（`E:\project\Ludiglot`，原理文档在该项目的
+`docs/design/audio-system.md`，不在本仓库）。
 
 ## 全景
 
-```
-游戏 pak ──①解包──> wem (hash 命名) ──②转码──> wav/ogg
-    ──③筛选分类──> data/characters/<id>/inbox/<情绪>/*.wav
-    ──④标准化──> datasets/v1/audio/<sha>.wav（内容寻址）
-    ──⑤冻结──> datasets/v1/{train,validation,test}.jsonl
-    ──⑥注册──> configs/characters/<id>.yaml
-```
+游戏资源由 Ludiglot 解包并转码，人工筛选后进入角色 inbox；本项目再做评估、
+标准化、审核、参考音选择与数据冻结，最后注册角色。源台词、来源和划分必须随音频保留。
 
 ## ① 解包（Ludiglot，不在本仓库）
 
@@ -78,11 +75,18 @@ data/characters/<id>/inbox/<情绪_标签>/【<情绪>】<台词>.wav
     --inbox data\characters\<id>\inbox --out outputs\_tmp\assess_<id>.json
 ```
 
-### 1b) 预处理（可选但建议：VAD 剪切质量差片段）
+### 1b) 预处理（现有剪切实现与质量门）
 
-**LoRA 会把数据集的声学签名学走（听感"磨砂"）**。对策是"剪切"：
-把文件里质量差的片段整段删掉再拼接。清洗到镜像目录，原 inbox
-不动：
+**现有 `--cut` 不应作为已验证的音质修复直接接入新训练。**
+[代码审查](../reports/tts-quality-review-2026-10-13.md) 已确认：被拒片段可能重新拼回、
+删除有声内容后台词未同步、来源/文本元数据未完整传递，以及全段拒绝/VAD失败没有自动隔离。
+这些缺陷尚未修复；它们在现有 v3 的触发数量仍待本地审计。
+
+当前质量门：优先保守首尾静音处理；需删除有声内容的样本先隔离，再校对保留段台词。
+明确传递来源、权威文本及原划分，审核拒绝或失败条目，不凭 `preprocess` 成功自动冻结入训练。
+LoRA 可能放大数据声学问题，但 VAD 不能证明段内磨砂已清除，更不能锁定全部退化原因。
+
+以下保留既有 CLI 和实现说明，供审计、复现或修复验证；输出写镜像目录，原 inbox 不动：
 
 ```bat
 .venv\Scripts\python.exe scripts\ingest\preprocess_audio.py ^
@@ -106,8 +110,9 @@ all_dropped flag（全段被丢→保留原音频待人工）。`--denoise`
 数据集本已人工筛过时剪切量会很小（爱弥斯 223 条仅剪 29s，
 全是首尾静音缝），此时磨砂另有来源。
 
-之后把 `--inbox` 换成 `inbox_clean` 继续走 2)~4)，数据集另存
-新版本（冻结集不可变，预处理产物 = 新版本）：
+只有逐条通过上述质量门后，才把 `--inbox` 换成 `inbox_clean` 继续走 2)~4)，
+并先走审核再冻结。数据集另存新版本；沿源片段保留划分，不能因音频 hash 改变就默默重分。
+以下是标准化、冻结和审计命令摘要，审核步骤仍按第3节执行：
 
 ```bat
 .venv\Scripts\python.exe scripts\ingest\standardize_inbox.py ^
@@ -213,12 +218,8 @@ backend_envs\asr_sensevoice\Scripts\python.exe scripts\asr_check.py ^
   导入 sidecar → `provenance`；无文本时 ASR 回填 → `asr`。
   锁暝 inbox 实测文件名多为 `【标签】_<编号>.wav`（无台词），
   187/263 条文本由 ASR 回填——审核页会标注 `ASR:` 前缀
-- **所有试听/审核网页走同一交互**：`build_*` 生成自包含 bundle，
-  `serve_review.py` 起本地服务，点击直接写盘（审核→`decisions.json`，
-  参考音→`ref.wav`+yaml，盲听评分→`listen/listen-ratings*.json`）——
-  一律没有"导出 json"步骤。试听页统一模板，只有服务确认写盘才显示已保存；
-  用户选完说“继续”，Agent 直接读取本地评分。`file://` 直开不启用评分。
-  完整约定与启动/读取命令见 [统一试听页](listening-review.md)。
+- **审核与参考音页面直接写盘**：分别写 `decisions.json` 和 `ref.wav`+yaml。
+  实验试听的共用模板、保存确认与“选完说继续”完整约定以 [统一试听规范](listening-review.md) 为准，不要求手动导出。
 
 锁暝实测（全量真实跑通）：270 inbox → 4 硬拒（超短）→ 266 标准化 →
 声纹 266 行（大部分 cos 0.64–0.87，1 条 0.35 疑似异声）+ ASR 266 行 →

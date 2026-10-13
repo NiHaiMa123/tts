@@ -1,5 +1,7 @@
 # Phase 5A — 锁暝 VoxCPM2 稳定性 / Codec 归因 / Prompt A/B
 
+> **已完成的历史实验报告**：保留当时结果、评分与复现说明，不是当前任务入口。本文的 PLAN 章节指向 [归档计划](../archive/implementation-plan-through-2026-10-13.md)，当前状态与路线见 [PLAN](../../PLAN.md)。旧脚本路径随重构迁移，实际入口以现有 `scripts/eval/`、`scripts/lora/` 和 [操作规范](../README.md) 为准。
+
 - 实验 ID：`suoming_voxcpm_phase5a`
 - 产出目录：`outputs/gates/suoming_voxcpm_phase5a/`（WAV 不提交 Git，仅本地）
 - 后端：`voxcpm2` · `openbmb/VoxCPM2` rev `32279effe8c19989596f05d353d1447f51d9e915` · voxcpm 2.0.3 · torch cu128 · bf16 模型
