@@ -632,7 +632,7 @@ outputs/gates/suoming_v1/report.md
 做一个统一试听页：
 
 ```text
-outputs/gates/suoming_v1/listen/index.html
+outputs/gates/<experiment_id>/listen/index.html
 ```
 
 每个样本显示：
@@ -649,7 +649,15 @@ outputs/gates/suoming_v1/listen/index.html
 - 稳定性备注
 - 其他备注
 
-评分存浏览器 localStorage，可导出 JSON。
+所有测试试听页使用同一个模板及本地保存协议，见
+`docs/pipelines/listening-review.md`。经 `scripts/ingest/serve_review.py`
+打开后，选择和备注直接写入 `listen/listen-ratings*.json`；页面显示服务
+确认的“已保存”后，用户只需说“继续”，Agent 直接读取本地文件。
+不要求手动导出、下载或提交 JSON。`file://` 直接打开不启用评分。
+浏览器缓存只作为尚未写盘的草稿，不作为 Agent 的结果来源。
+
+继续入口：`scripts/eval/read_listening.py --bundle <当前实验目录>`。
+必须核对实验和音频 SHA；未评、疲劳及过期选择分别保留，不替用户补分。
 
 不要自动替用户填写主观评分。
 
@@ -1159,7 +1167,7 @@ Devin 完成本计划 Phase 0–4 后，至少提交：
 
 - 优先从本地现有 \`outputs/gates/suoming_v1/listen/listen-ratings.json\` 读取；若不存在，保留报告中的评分作为 \`report_transcription\` 并标明不是原始 JSON，**禁止杜撰原始评分文件**。
 - 经脱敏后保存到 \`docs/reports/suoming-gate-v1-user-ratings.json\`，包括来源、评分方向（高分代表改善）、样本相对路径、原有四维分数与已有备注；不存机器私有绝对路径、账号或 token。
-- 新试听页可以导出 Phase 5A 评分，包含 \`experiment_id\` + \`case_id\` + \`output_sha256\`，防止重生成后旧评分套在新 WAV 上。
+- 新试听页直接写入 Phase 5A 本地评分，包含 \`experiment_id\` + \`case_id\` + \`output_sha256\`，防止重生成后旧评分套在新 WAV 上。
 - 静态试听包按 \`ground truth / baseline / stability / prompt AB / codec diagnostics\` 分类，**同时保留匿名盲听视图与可解盲映射**。人工主观栏默认 \`PENDING_USER_LISTENING\`。
 - 修复已知残留风险：重跑同名 case 时必须保证对应 WAV 是本轮新生成或经 sidecar hash 和 case manifest 明确验证为合法复用；不能因“已有同名 WAV”而假报 \`ok\`。
 - 尽量不改 WebUI 大框架，只复用现有 listen page / gate 工具；不要引入复杂数据库。
@@ -1283,7 +1291,7 @@ Devin 完成本计划 Phase 0–4 后，至少提交：
 3. 对十条新增 WAV，记录 `case_id`、输入/输出 SHA、生成时长、sample rate、模型及 Python 包版本、实际 options、重试情况、生成耗时、wav sanity（长度/NaN/静音/削波）。输出成功需要本轮新的 sidecar 与真实 WAV hash，不可仅靠“路径上已经存在 WAV”判断。
 4. 不对音频做 EQ、后期降噪、响度美化、改速、增混响、频谱稳定器、训练/权重修改。可以给盲听生成统一**播放响度**的额外副本，但保留 raw，并在评分标签里明确区分。
 5. 试听页面按**同一文本配对 P0/P2**，不暴露型号/Prompt 身份的盲听标签；同一对尽量随机化左右位置，支持解盲、用户保存 1–5 四维评分及完整性/失真备注。
-6. 评分导出绑定 `experiment_id + case_id + real_output_sha256`。**相同 SHA 的 WAV 在本实验只计一次音质证据**；旧 Phase 5A 里同 SHA 的评分差异要作为 `context_variance` 案例保存，不以平均后的数字掩盖，也不当独立样本加权。针对 P0/P2 可给出每句配对分数与例外说明，而不是做一个不可信的综合分。
+6. 本地评分绑定 `experiment_id + case_id + real_output_sha256`。**相同 SHA 的 WAV 在本实验只计一次音质证据**；旧 Phase 5A 里同 SHA 的评分差异要作为 `context_variance` 案例保存，不以平均后的数字掩盖，也不当独立样本加权。针对 P0/P2 可给出每句配对分数与例外说明，而不是做一个不可信的综合分。
 
 ## 24.4 文字完整性与异常分类
 
@@ -1481,7 +1489,7 @@ C. 主观声音异常辅助定位：
 5. 若用户表示“听麻木了/分不出来”，允许直接点 \`UNCERTAIN_FATIGUE\` 并停止本轮，**不要把‘无差异’替代疲劳不确定**；
 6. 支持回到干净 reference 再校准、单独复核一次重大缺陷；不强制长时间重播；
 7. 隐藏 checkpoint 身份并在不同轮次平衡 A/B 左右顺序；识别同 SHA 的重复引用，禁止当作两个独立声音结果；
-8. 导出：experiment_id、pair_id、A/B 的真实 sha/checkpoint、盲测顺序、用户选择、first_impression、缺陷标签、optional 分数、是否疲劳/不确定、时间信息、记录时间和评测批次；
+8. 自动写入本地文件：experiment_id、pair_id、A/B 的真实 sha/checkpoint、盲测顺序、用户选择、first_impression、缺陷标签、optional 分数、是否疲劳/不确定、时间信息、记录时间和评测批次；
 9. **不合成或自动生成用户评价**；未听标 \`PENDING_USER_LISTENING\`。
 
 首次听感是用于减少疲劳的操作方法，**不是客观真值**。只有稳定复现的缺陷或多组同文配对一致趋势，才能作为更强证据；对不确定/疲劳样本不强迫判输赢。
@@ -1524,7 +1532,7 @@ C. 主观声音异常辅助定位：
 - \`scripts/evaluate_voxcpm_lora_pilot.py\`：加载原始 base 与三个 LoRA checkpoints，用共同条件输出 WAV 与 sidecar；
 - \`docs/reports/suoming-voxcpm-lora-pilot-v1.md\`：训练前数据统计、训练配置、step/loss/VRAM、每检查点样例/初筛，明确 Codec 风险和未人工验证之处；
 - \`outputs/gates/suoming_voxcpm_lora_pilot_v1/\`：本地 adapter、logs、manifest、metrics、WAV、listen/index.html；默认 gitignored，不提交原始语音/模型权重；
-- 测试：train-only 过滤、防泄漏、步数硬上限、失败退出、hash、LoRA adapter 正确加载、训练前后配置同一性、盲测 A/B 去重、\`UNCERTAIN_FATIGUE\` 导出行为。
+- 测试：train-only 过滤、防泄漏、步数硬上限、失败退出、hash、LoRA adapter 正确加载、训练前后配置同一性、盲测 A/B 去重、\`UNCERTAIN_FATIGUE\` 写盘行为。
 
 **执行顺序（严格）：**
 1. 拉最新 main；阅读本第 25 节、Phase 5A/5A2 报告及最新人耳备注；
@@ -1532,7 +1540,7 @@ C. 主观声音异常辅助定位：
 3. 显存/训练 1–2 step smoke；失败记录 STOP，不能无限升级训练工具；
 4. smoke 通过后，执行**一次**不超过 150 optimizer steps 的 LoRA pilot，保存 step50/100/150；
 5. 加载各 checkpoint 跑受控 raw 推理，生成 baseline 与 18 个以内 LoRA 测试音频，自动初筛；
-6. 生成低疲劳 A/B 页面，默认先呈现 4 对，导出 SHA 绑定评分；不要代替用户评审；
+6. 生成低疲劳 A/B 页面，默认先呈现 4 对，自动写入 SHA 绑定评分；不要代替用户评审；
 7. 跑测试，提交 GitHub 的代码、manifest 模板/脱敏统计和诊断报告；
 8. **到此停止**，回报 commit、报告、可在本地打开的试听页与 BLOCKED/待人工项。后续是否扩训/升生产由用户决定。
 

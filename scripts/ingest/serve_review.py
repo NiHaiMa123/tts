@@ -26,12 +26,17 @@ import hashlib
 import json
 import re
 import sys
+import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse, parse_qs
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+from character_tts.web.listen_store import (
+    ReviewError, contract_for, read_snapshot, save_snapshot, verify_assets,
+)
 CHAR_RE = re.compile(r"^[a-z0-9_]+$")
 LISTEN_NAME_RE = re.compile(r"^listen-ratings[\w-]*\.json$")
 
@@ -64,6 +69,8 @@ def _update_character_yaml(char: str, ref_path: Path, sha: str,
 def make_handler(bundle: Path, root: Path = REPO_ROOT):
     bundle = bundle.resolve()
     root = Path(root).resolve()
+    ratings_lock = threading.Lock()
+    audio_hash_cache: dict = {}
 
     class Handler(BaseHTTPRequestHandler):
         def _send(self, code: int, body: bytes, ctype: str) -> None:
@@ -96,7 +103,7 @@ def make_handler(bundle: Path, root: Path = REPO_ROOT):
             url = urlparse(self.path)
             path = unquote(url.path).lstrip("/")
             if not path:
-                for cand in ("review.html", "refpick.html"):
+                for cand in ("listen/index.html", "review.html", "refpick.html"):
                     if (bundle / cand).is_file():
                         path = cand
                         break
@@ -114,16 +121,21 @@ def make_handler(bundle: Path, root: Path = REPO_ROOT):
                 return
             if path == "api/listen-ratings":
                 name = parse_qs(url.query).get("name", [""])[0]
-                p = (bundle / "listen" / (name + ".state")).resolve() \
-                    if LISTEN_NAME_RE.match(name) else None
-                if p is None or not str(p).startswith(str(bundle)) \
-                        or not p.is_file():
-                    self._json({"state": None})
-                    return
-                self._json(json.loads(p.read_text(encoding="utf-8")))
+                try:
+                    with ratings_lock:
+                        contract = contract_for(bundle)
+                        if contract:
+                            if name != contract["ratings_name"]:
+                                raise ReviewError("experiment changed; reload", 409)
+                            verify_assets(bundle, contract, audio_hash_cache)
+                        snapshot = read_snapshot(bundle, name)
+                    self._json(snapshot)
+                except (ReviewError, json.JSONDecodeError) as e:
+                    self._json({"ok": False, "error": str(e)},
+                               e.code if isinstance(e, ReviewError) else 400)
                 return
             target = (bundle / path).resolve()
-            if not str(target).startswith(str(bundle)) or \
+            if not target.is_relative_to(bundle) or \
                     not target.is_file():
                 self._send(404, b"not found", "text/plain")
                 return
@@ -147,26 +159,19 @@ def make_handler(bundle: Path, root: Path = REPO_ROOT):
                             str(bundle / "decisions.json")})
                 return
             if url.path == "/api/listen-ratings":
-                data = self._body()
-                name = data.get("name") or ""
-                if not LISTEN_NAME_RE.match(name):
-                    self._json({"ok": False, "error": "bad name"}, 400)
-                    return
-                listen_dir = bundle / "listen"
-                if not listen_dir.is_dir():
-                    self._json({"ok": False, "error": "no listen dir"},
-                               400)
-                    return
-                (listen_dir / name).write_text(json.dumps(
-                    data.get("data"), ensure_ascii=False, indent=2),
-                    encoding="utf-8")
-                (listen_dir / (name + ".state")).write_text(json.dumps({
-                    "saved_at": datetime.now(timezone.utc)
-                    .isoformat(timespec="seconds"),
-                    "state": data.get("state")}, ensure_ascii=False),
-                    encoding="utf-8")
-                self._json({"ok": True,
-                            "path": str(listen_dir / name)})
+                try:
+                    data = self._body()
+                    if not isinstance(data, dict):
+                        raise ReviewError("request must be an object")
+                    with ratings_lock:
+                        result = save_snapshot(bundle, data, audio_hash_cache)
+                    self._json(result)
+                except (ReviewError, json.JSONDecodeError) as e:
+                    self._json({"ok": False, "error": str(e)},
+                               e.code if isinstance(e, ReviewError) else 400)
+                except OSError:
+                    self._json({"ok": False,
+                                "error": "local ratings write failed"}, 500)
                 return
             if url.path == "/api/ref-pick":
                 data = self._body()
@@ -212,6 +217,8 @@ def main() -> int:
     ap.add_argument("--bundle", required=True,
                     help="dir containing review.html / refpick.html / audio/")
     ap.add_argument("--port", type=int, default=7865)
+    ap.add_argument("--open-browser", action="store_true",
+                    help="open the local listening/review page after startup")
     args = ap.parse_args()
     bundle = Path(args.bundle)
     if not bundle.is_dir():
@@ -220,7 +227,10 @@ def main() -> int:
     server = ThreadingHTTPServer(("127.0.0.1", args.port),
                                  make_handler(bundle))
     print(f"serving {bundle} -> http://127.0.0.1:{args.port}/")
-    print("  review.html  /  refpick.html ; Ctrl+C to stop")
+    print("  listen/index.html / review.html / refpick.html; Ctrl+C to stop")
+    if args.open_browser:
+        import webbrowser
+        webbrowser.open(f"http://127.0.0.1:{args.port}/")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

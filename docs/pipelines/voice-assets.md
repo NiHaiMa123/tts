@@ -216,7 +216,9 @@ backend_envs\asr_sensevoice\Scripts\python.exe scripts\asr_check.py ^
 - **所有试听/审核网页走同一交互**：`build_*` 生成自包含 bundle，
   `serve_review.py` 起本地服务，点击直接写盘（审核→`decisions.json`，
   参考音→`ref.wav`+yaml，盲听评分→`listen/listen-ratings*.json`）——
-  一律没有"导出 json"步骤；file:// 直开才退回 localStorage+手动导出
+  一律没有"导出 json"步骤。试听页统一模板，只有服务确认写盘才显示已保存；
+  用户选完说“继续”，Agent 直接读取本地评分。`file://` 直开不启用评分。
+  完整约定与启动/读取命令见 [统一试听页](listening-review.md)。
 
 锁暝实测（全量真实跑通）：270 inbox → 4 硬拒（超短）→ 266 标准化 →
 声纹 266 行（大部分 cos 0.64–0.87，1 条 0.35 疑似异声）+ ASR 266 行 →
